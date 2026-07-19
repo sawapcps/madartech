@@ -11,13 +11,16 @@ export async function OPTIONS() {
     return new NextResponse(null, { status: 200, headers: CORS });
 }
 
+// ============================================================
+// ✅ GET - جلب جميع العملاء
+// ============================================================
 export async function GET(req: NextRequest) {
     try {
         const env = (req as any).env || process.env;
         const db = await getDb(env);
 
         const result = await db
-            .prepare('SELECT id, name, email, phone, company, status, storage_limit_mb, db_limit_mb, notes, created_at, updated_at FROM tenants ORDER BY created_at DESC')
+            .prepare('SELECT * FROM tenants ORDER BY created_at DESC')
             .all();
 
         return NextResponse.json({
@@ -25,15 +28,18 @@ export async function GET(req: NextRequest) {
             data: result.results || [],
         }, { headers: CORS });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('❌ GET tenants error:', error);
         return NextResponse.json({
             success: false,
-            error: error instanceof Error ? error.message : 'فشل جلب العملاء',
+            error: error.message || 'فشل جلب العملاء',
         }, { status: 500, headers: CORS });
     }
 }
 
+// ============================================================
+// ✅ POST - إضافة أو تحديث عميل
+// ============================================================
 export async function POST(req: NextRequest) {
     try {
         const env = (req as any).env || process.env;
@@ -42,7 +48,7 @@ export async function POST(req: NextRequest) {
 
         console.log('📥 POST tenants - body:', body);
 
-        // ✅ معالجة التحديث (action: 'update')
+        // ✅ حالة التحديث (action: 'update')
         if (body.action === 'update' && body.id) {
             const { id, name, email, phone, company, status, storage_limit_mb, db_limit_mb, notes } = body;
 
@@ -142,15 +148,18 @@ export async function POST(req: NextRequest) {
             message: 'تم إضافة العميل بنجاح',
         }, { headers: CORS });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('❌ POST tenants error:', error);
         return NextResponse.json({
             success: false,
-            error: error instanceof Error ? error.message : 'فشل حفظ العميل',
+            error: error.message || 'فشل حفظ العميل',
         }, { status: 500, headers: CORS });
     }
 }
 
+// ============================================================
+// ✅ DELETE - حذف عميل
+// ============================================================
 export async function DELETE(req: NextRequest) {
     try {
         const env = (req as any).env || process.env;
@@ -175,11 +184,11 @@ export async function DELETE(req: NextRequest) {
             message: 'تم حذف العميل بنجاح',
         }, { headers: CORS });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('❌ DELETE tenants error:', error);
         return NextResponse.json({
             success: false,
-            error: error instanceof Error ? error.message : 'فشل حذف العميل',
+            error: error.message || 'فشل حذف العميل',
         }, { status: 500, headers: CORS });
     }
 }
