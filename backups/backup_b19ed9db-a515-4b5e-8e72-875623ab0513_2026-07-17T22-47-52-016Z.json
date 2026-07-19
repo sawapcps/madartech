@@ -1,0 +1,17 @@
+{
+  "tenant_id": "b19ed9db-a515-4b5e-8e72-875623ab0513",
+  "exported_at": "2026-07-17T22:47:51.735Z",
+  "version": "1.0",
+  "tables": {
+    "products": [],
+    "customers": [],
+    "sales": [],
+    "suppliers": [],
+    "purchases": [],
+    "expenses": [],
+    "cheques": [],
+    "areas": [],
+    "users": [],
+    "companies": []
+  }
+}

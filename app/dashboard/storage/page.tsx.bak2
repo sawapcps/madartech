@@ -1,0 +1,586 @@
+﻿'use client';
+
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { RouteGuard } from '@/components/route-guard';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { 
+  HardDrive, Upload, Folder, File as FileIcon, Search, 
+  Trash2, Download, Image, FileText, FileSpreadsheet, 
+  FileCode, Video, Music, Loader2, RefreshCw,
+  CheckCircle, XCircle, Clock, AlertCircle, Link2,
+  Table, Link
+} from 'lucide-react';
+import { toast } from 'sonner';
+
+// ============================================================
+// Types
+// ============================================================
+
+type StorageFile = {
+  id: string;
+  file_name: string;
+  file_path: string;
+  file_size: number;
+  file_type: string | null;
+  folder: string;
+  table_name: string | null;
+  record_id: string | null;
+  company_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
+
+// ============================================================
+// Helper Functions
+// ============================================================
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+}
+
+function getFileIcon(fileType: string | null) {
+  if (!fileType) return <FileIcon className="w-5 h-5 text-muted-foreground" />;
+  
+  const type = fileType.toLowerCase();
+  if (type.includes('image')) return <Image className="w-5 h-5 text-blue-500" />;
+  if (type.includes('pdf')) return <FileText className="w-5 h-5 text-red-500" />;
+  if (type.includes('sheet') || type.includes('excel') || type.includes('spreadsheet')) 
+    return <FileSpreadsheet className="w-5 h-5 text-green-500" />;
+  if (type.includes('sql')) return <FileCode className="w-5 h-5 text-yellow-500" />;
+  if (type.includes('video')) return <Video className="w-5 h-5 text-purple-500" />;
+  if (type.includes('audio')) return <Music className="w-5 h-5 text-pink-500" />;
+  if (type.includes('zip') || type.includes('rar') || type.includes('archive')) 
+    return <FileCode className="w-5 h-5 text-orange-500" />;
+  return <FileIcon className="w-5 h-5 text-muted-foreground" />;
+}
+
+function getFileTypeLabel(fileType: string | null): string {
+  if (!fileType) return 'غير معروف';
+  const parts = fileType.split('/');
+  return parts[parts.length - 1].toUpperCase();
+}
+
+// ============================================================
+// Main Component
+// ============================================================
+
+export default function StoragePage() {
+  return (
+    <RouteGuard>
+      <StorageContent />
+    </RouteGuard>
+  );
+}
+
+// ============================================================
+// Storage Content
+// ============================================================
+
+function StorageContent() {
+  // ============================================================
+  // State
+  // ============================================================
+  
+  const [files, setFiles] = useState<StorageFile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [folderFilter, setFolderFilter] = useState<string>('all');
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ✅ خيارات الربط
+  const [selectedTable, setSelectedTable] = useState<string>('');
+  const [selectedRecordId, setSelectedRecordId] = useState<string>('');
+  const [availableTables, setAvailableTables] = useState<string[]>([]);
+  const [records, setRecords] = useState<{id: string, name: string}[]>([]);
+  const [showLinkOptions, setShowLinkOptions] = useState<boolean>(false);
+
+  const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
+
+  // ============================================================
+  // Fetch Tables
+  // ============================================================
+  
+  useEffect(() => {
+    const fetchTables = async () => {
+      try {
+        const response = await fetch('/api/v1/data/tables', {
+          headers: { 'X-API-Key': API_KEY }
+        });
+        const result = await response.json();
+        if (result.success) {
+          setAvailableTables(result.data || []);
+        }
+      } catch (error) {
+        console.error('Error fetching tables:', error);
+      }
+    };
+    fetchTables();
+  }, []);
+
+  // ============================================================
+  // Fetch Records for selected table
+  // ============================================================
+  
+  useEffect(() => {
+    if (!selectedTable) {
+      setRecords([]);
+      return;
+    }
+
+    const fetchRecords = async () => {
+      try {
+        const response = await fetch(`/api/v1/data/${selectedTable}`, {
+          headers: { 'X-API-Key': API_KEY }
+        });
+        const result = await response.json();
+        if (result.success) {
+          setRecords(result.data || []);
+        }
+      } catch (error) {
+        console.error('Error fetching records:', error);
+      }
+    };
+    fetchRecords();
+  }, [selectedTable]);
+
+  // ============================================================
+  // Fetch Files
+  // ============================================================
+  
+  const fetchFiles = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/v1/storage', {
+        headers: { 'X-API-Key': API_KEY }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setFiles(result.data || []);
+      } else {
+        toast.error(result.error || 'فشل تحميل الملفات');
+      }
+    } catch (error) {
+      console.error('Error fetching files:', error);
+      toast.error('فشل تحميل الملفات');
+    } finally {
+      setLoading(false);
+    }
+  }, [API_KEY]);
+
+  useEffect(() => {
+    fetchFiles();
+  }, [fetchFiles]);
+
+  // ============================================================
+  // Upload File
+  // ============================================================
+  
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('حجم الملف يتجاوز 10 ميغابايت');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setUploadStatus('uploading');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folder', 'uploads');
+      
+      // ✅ إضافة خيارات الربط
+      if (selectedTable) {
+        formData.append('table_name', selectedTable);
+      }
+      if (selectedRecordId) {
+        formData.append('record_id', selectedRecordId);
+      }
+
+      const response = await fetch('/api/v1/storage/upload', {
+        method: 'POST',
+        headers: { 'X-API-Key': API_KEY },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        setUploadStatus('success');
+        toast.success(`✅ تم رفع ${file.name}`);
+        fetchFiles();
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        setTimeout(() => setUploadStatus('idle'), 3000);
+      } else {
+        setUploadStatus('error');
+        toast.error(result.error || 'فشل رفع الملف');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        setTimeout(() => setUploadStatus('idle'), 3000);
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      setUploadStatus('error');
+      toast.error('فشل رفع الملف');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setTimeout(() => setUploadStatus('idle'), 3000);
+    }
+  };
+
+  // ============================================================
+  // Delete File
+  // ============================================================
+  
+  const handleDelete = async (id: string, fileName: string) => {
+    if (!confirm(`⚠️ هل أنت متأكد من حذف "${fileName}"`)) return;
+
+    try {
+      const response = await fetch(`/api/v1/storage/delete?id=${id}`, {
+        method: 'DELETE',
+        headers: { 'X-API-Key': API_KEY }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        toast.success(`🗑️ تم حذف ${fileName}`);
+        fetchFiles();
+      } else {
+        toast.error(result.error || 'فشل حذف الملف');
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error('فشل حذف الملف');
+    }
+  };
+
+  // ============================================================
+  // Copy Link
+  // ============================================================
+  
+  const copyLink = (path: string) => {
+    const fullUrl = `${window.location.origin}${path}`;
+    navigator.clipboard.writeText(fullUrl);
+    toast.success('✅ تم نسخ الرابط');
+  };
+
+  // ============================================================
+  // Filters
+  // ============================================================
+  
+  const folders = Array.from(new Set(files.map(f => f.folder)));
+  
+  const filteredFiles = files.filter(file => {
+    const matchesSearch = file.file_name.toLowerCase().includes(search.toLowerCase()) ||
+                          (file.file_type?.toLowerCase() || '').includes(search.toLowerCase());
+    const matchesFolder = folderFilter === 'all' || file.folder === folderFilter;
+    return matchesSearch && matchesFolder;
+  });
+
+  const totalSize = filteredFiles.reduce((sum, f) => sum + (f.file_size || 0), 0);
+
+  // ============================================================
+  // Render
+  // ============================================================
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">إدارة التخزين</h1>
+          <p className="text-muted-foreground mt-1">إدارة ملفات العملاء</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={fetchFiles} disabled={loading}>
+            <RefreshCw className={`w-4 h-4 ml-2 ${loading ? 'animate-spin' : ''}`} />
+            تحديث
+          </Button>
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadStatus === 'uploading'}
+          >
+            {uploadStatus === 'uploading' ? (
+              <>
+                <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                رفع...
+              </>
+            ) : uploadStatus === 'success' ? (
+              <>
+                <CheckCircle className="w-4 h-4 ml-2 text-green-500" />
+                تم الرفع
+              </>
+            ) : uploadStatus === 'error' ? (
+              <>
+                <XCircle className="w-4 h-4 ml-2 text-red-500" />
+                فشل الرفع
+              </>
+            ) : (
+              <>
+                <Upload className="w-4 h-4 ml-2" />
+                رفع ملف
+              </>
+            )}
+          </Button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            onChange={handleUpload}
+            accept="*/*"
+          />
+        </div>
+      </div>
+
+      {/* ✅ خيارات الربط */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1">
+              <Label className="text-sm">ربط بالجدول</Label>
+              <select
+                value={selectedTable}
+                onChange={(e) => setSelectedTable(e.target.value)}
+                className="w-full h-9 rounded-lg border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">-- بدون ربط --</option>
+                {availableTables.map((table) => (
+                  <option key={table} value={table}>{table}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1">
+              <Label className="text-sm">السجل المرتبط</Label>
+              <select
+                value={selectedRecordId}
+                onChange={(e) => setSelectedRecordId(e.target.value)}
+                disabled={!selectedTable}
+                className="w-full h-9 rounded-lg border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+              >
+                <option value="">-- اختر السجل --</option>
+                {records.map((record) => (
+                  <option key={record.id} value={record.id}>
+                    {record.name || record.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowLinkOptions(!showLinkOptions)}
+              >
+                <Link className="w-4 h-4 ml-2" />
+                {showLinkOptions ? 'إخفاء' : 'خيارات الربط'}
+              </Button>
+            </div>
+          </div>
+          {selectedTable && selectedRecordId && (
+            <div className="mt-2 text-xs text-muted-foreground">
+              🔗 الملفات سترتبط بـ: {selectedTable} → {selectedRecordId}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <HardDrive className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-lg font-bold">{formatBytes(totalSize)}</p>
+              <p className="text-xs text-muted-foreground">إجمالي الحجم</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center">
+              <FileIcon className="w-5 h-5 text-success" />
+            </div>
+            <div>
+              <p className="text-lg font-bold">{filteredFiles.length}</p>
+              <p className="text-xs text-muted-foreground">عدد الملفات</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center">
+              <Folder className="w-5 h-5 text-warning" />
+            </div>
+            <div>
+              <p className="text-lg font-bold">{folders.length}</p>
+              <p className="text-xs text-muted-foreground">عدد المجلدات</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+              <Clock className="w-5 h-5 text-blue-500" />
+            </div>
+            <div>
+              <p className="text-lg font-bold">{files.length > 0 ? new Date(files[0]?.created_at).toLocaleDateString('ar') : '-'}</p>
+              <p className="text-xs text-muted-foreground">آخر ملف</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="بحث عن ملف..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pr-10"
+          />
+        </div>
+        <select
+          value={folderFilter}
+          onChange={(e) => setFolderFilter(e.target.value)}
+          className="h-9 rounded-lg border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="all">جميع المجلدات</option>
+          {folders.map((folder) => (
+            <option key={folder} value={folder}>
+              {folder === '/' ? 'الجذر' : folder.replace(/^\//, '')}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Files table */}
+      <Card>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="p-12 text-center">
+              <Loader2 className="w-8 h-8 mx-auto animate-spin text-muted-foreground" />
+              <p className="text-muted-foreground mt-2">جاري تحميل الملفات...</p>
+            </div>
+          ) : filteredFiles.length === 0 ? (
+            <div className="p-12 text-center text-muted-foreground">
+              <HardDrive className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p className="text-lg font-medium">لا توجد ملفات</p>
+              <p className="text-sm">قم برفع ملف جديد باستخدام زر "رفع ملف"</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto scrollbar-thin">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/30">
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">الملف</th>
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">المجلد</th>
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">الجدول</th>
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">السجل</th>
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">الحجم</th>
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">النوع</th>
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground w-28">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredFiles.map((file) => (
+                    <tr key={file.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          {getFileIcon(file.file_type)}
+                          <span className="font-medium truncate max-w-[200px]" title={file.file_name}>
+                            {file.file_name}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {file.folder === '/' ? '/' : file.folder}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4">
+                        <Badge variant="secondary" className="text-xs">
+                          {file.table_name || '-'}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {file.record_id ? file.record_id.substring(0, 8) + '...' : '-'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-muted-foreground font-mono text-xs">
+                        {formatBytes(file.file_size || 0)}
+                      </td>
+                      <td className="py-3 px-4">
+                        <Badge variant="secondary" className="text-xs font-mono">
+                          {getFileTypeLabel(file.file_type)}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => copyLink(file.file_path)}
+                            className="p-1.5 hover:bg-muted rounded transition"
+                            title="نسخ الرابط"
+                          >
+                            <Link2 className="w-4 h-4" />
+                          </button>
+                          <a
+                            href={file.file_path}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 hover:bg-muted rounded transition"
+                            title="تحميل"
+                          >
+                            <Download className="w-4 h-4" />
+                          </a>
+                          <button
+                            onClick={() => handleDelete(file.id, file.file_name)}
+                            className="p-1.5 hover:bg-destructive/10 rounded transition text-destructive"
+                            title="حذف"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

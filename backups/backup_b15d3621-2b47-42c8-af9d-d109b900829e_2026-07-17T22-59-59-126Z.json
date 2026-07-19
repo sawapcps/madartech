@@ -1,0 +1,18 @@
+{
+  "client_id": "b15d3621-2b47-42c8-af9d-d109b900829e",
+  "tenant_id": "b15d3621-2b47-42c8-af9d-d109b900829e",
+  "exported_at": "2026-07-17T22:59:58.879Z",
+  "version": "1.0",
+  "tables": {
+    "products": [],
+    "customers": [],
+    "sales": [],
+    "suppliers": [],
+    "purchases": [],
+    "expenses": [],
+    "cheques": [],
+    "areas": [],
+    "users": [],
+    "companies": []
+  }
+}

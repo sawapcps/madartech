@@ -1,0 +1,80 @@
+{
+  "client_id": "b15d3621-2b47-42c8-af9d-d109b900829e",
+  "tenant_id": "b15d3621-2b47-42c8-af9d-d109b900829e",
+  "exported_at": "2026-07-17T22:56:24.467Z",
+  "version": "1.0",
+  "tables": {
+    "products": [
+      {
+        "id": "11111111-1111-1111-1111-111111111111",
+        "name": "هاتف آيفون 15",
+        "price": "4500.00",
+        "quantity": 50,
+        "company_id": "b15d3621-2b47-42c8-af9d-d109b900829e"
+      },
+      {
+        "id": "22222222-2222-2222-2222-222222222222",
+        "name": "لاب توب HP",
+        "price": "3200.00",
+        "quantity": 30,
+        "company_id": "b15d3621-2b47-42c8-af9d-d109b900829e"
+      },
+      {
+        "id": "33333333-3333-3333-3333-333333333333",
+        "name": "ساعة ذكية",
+        "price": "1200.00",
+        "quantity": 100,
+        "company_id": "b15d3621-2b47-42c8-af9d-d109b900829e"
+      }
+    ],
+    "customers": [
+      {
+        "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "name": "أحمد محمد",
+        "phone": "0595123456",
+        "company_id": "b15d3621-2b47-42c8-af9d-d109b900829e"
+      },
+      {
+        "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        "name": "سارة علي",
+        "phone": "0595987654",
+        "company_id": "b15d3621-2b47-42c8-af9d-d109b900829e"
+      },
+      {
+        "id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+        "name": "محمد خالد",
+        "phone": "0595567890",
+        "company_id": "b15d3621-2b47-42c8-af9d-d109b900829e"
+      }
+    ],
+    "sales": [
+      {
+        "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        "customer_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "total_amount": "500.00",
+        "paid_amount": "500.00",
+        "remaining_amount": "0.00",
+        "sale_type": "cash",
+        "status": "completed",
+        "company_id": "b15d3621-2b47-42c8-af9d-d109b900829e"
+      },
+      {
+        "id": "11111111-1111-1111-1111-111111111112",
+        "customer_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        "total_amount": "300.00",
+        "paid_amount": "200.00",
+        "remaining_amount": "100.00",
+        "sale_type": "credit",
+        "status": "pending",
+        "company_id": "b15d3621-2b47-42c8-af9d-d109b900829e"
+      }
+    ],
+    "suppliers": [],
+    "purchases": [],
+    "expenses": [],
+    "cheques": [],
+    "areas": [],
+    "users": [],
+    "companies": []
+  }
+}

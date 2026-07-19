@@ -1,0 +1,23 @@
+{
+  "name": "cloud",
+  "compatibility_date": "2026-06-05",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": ".open-next/worker.js",
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "madartech_platform",
+      "database_id": "1e57a5a3-8705-4b28-ad17-7b7a1e5c7fa6"
+    }
+  ],
+  "routes": [
+    {
+      "pattern": "cloud.madartech.uk/*",
+      "zone_name": "madartech.uk"
+    }
+  ]
+}

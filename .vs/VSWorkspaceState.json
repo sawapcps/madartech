@@ -1,0 +1,16 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\app",
+    "\\app\\api",
+    "\\app\\api\\admin",
+    "\\app\\api\\admin\\backups",
+    "\\app\\api\\admin\\backups\\upload",
+    "\\app\\dashboard",
+    "\\app\\dashboard\\applications",
+    "\\app\\dashboard\\backups",
+    "\\app\\dashboard\\clients"
+  ],
+  "SelectedNode": "\\app\\api\\admin\\backups\\upload\\route.ts",
+  "PreviewInSolutionExplorer": false
+}

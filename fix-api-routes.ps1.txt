@@ -1,0 +1,155 @@
+# ============================================
+# سكربت تصحيح API Routes لـ Next.js 15+
+# ============================================
+
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  🔧 إصلاح ملفات API Routes لـ Next.js 15+  " -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+
+# 1. البحث عن جميع ملفات route.ts في مجلد api
+$files = Get-ChildItem -Path ".\app\api" -Recurse -Filter "route.ts" -File
+
+if ($files.Count -eq 0) {
+    Write-Host "❌ لم يتم العثور على أي ملفات route.ts في مجلد app/api" -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "📂 تم العثور على $($files.Count) ملف(ات) route.ts" -ForegroundColor Yellow
+Write-Host ""
+
+$fixedCount = 0
+$errors = @()
+
+# 2. معالجة كل ملف
+foreach ($file in $files) {
+    try {
+        Write-Host "📄 معالجة: $($file.FullName)" -ForegroundColor White
+        
+        # قراءة محتوى الملف
+        $content = Get-Content -Path $file.FullName -Raw -Encoding UTF8
+        
+        # حفظ النسخة الأصلية للمقارنة
+        $originalContent = $content
+        
+        # ==========================================
+        # التصحيح 1: تغيير تعريف params إلى Promise
+        # ==========================================
+        # من: { params }: { params: { id: string } }
+        # إلى: { params }: { params: Promise<{ id: string }> }
+        
+        $pattern1 = '({ params }: { params: { )'
+        $replacement1 = '({ params }: { params: Promise<{ '
+        $content = $content -replace $pattern1, $replacement1
+        
+        # ==========================================
+        # التصحيح 2: إضافة await قبل params
+        # ==========================================
+        # من: const { id } = params;
+        # إلى: const { id } = await params;
+        
+        $pattern2 = 'const \{ ([^}]+) \} = params;'
+        $replacement2 = 'const { $1 } = await params;'
+        $content = $content -replace $pattern2, $replacement2
+        
+        # ==========================================
+        # التصحيح 3: الحالات الخاصة (إذا كان params مستخدم بشكل مختلف)
+        # ==========================================
+        # من: const id = params.id;
+        # إلى: const { id } = await params;
+        
+        # (اختياري) يمكن إضافة المزيد من الأنماط حسب الحاجة
+        
+        # حفظ التغييرات إذا كان هناك تغيير
+        if ($content -ne $originalContent) {
+            $content | Set-Content -Path $file.FullName -Encoding UTF8 -NoNewline
+            Write-Host "   ✅ تم التصحيح" -ForegroundColor Green
+            $fixedCount++
+        } else {
+            Write-Host "   ⚠️  لا توجد تغييرات مطلوبة" -ForegroundColor Yellow
+        }
+        
+    } catch {
+        Write-Host "   ❌ خطأ: $_" -ForegroundColor Red
+        $errors += $file.FullName
+    }
+    
+    Write-Host ""
+}
+
+# ============================================
+# 3. التحقق من التصحيح
+# ============================================
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  🔍 التحقق من التصحيح  " -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+
+$verifiedCount = 0
+
+foreach ($file in $files) {
+    $content = Get-Content -Path $file.FullName -Raw -Encoding UTF8
+    
+    # التحقق من وجود Promise و await
+    $hasPromise = $content -match 'params: Promise<{'
+    $hasAwait = $content -match 'await params'
+    
+    if ($hasPromise -and $hasAwait) {
+        Write-Host "✅ $($file.Name) - تم التصحيح بنجاح" -ForegroundColor Green
+        $verifiedCount++
+    } elseif ($hasPromise -or $hasAwait) {
+        Write-Host "⚠️  $($file.Name) - تصحيح جزئي" -ForegroundColor Yellow
+    } else {
+        Write-Host "❌ $($file.Name) - لم يتم التصحيح" -ForegroundColor Red
+    }
+}
+
+# ============================================
+# 4. عرض التقرير النهائي
+# ============================================
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  📊 التقرير النهائي  " -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "📁 إجمالي الملفات: $($files.Count)" -ForegroundColor White
+Write-Host "✅ تم التصحيح: $fixedCount" -ForegroundColor Green
+Write-Host "🔍 تم التحقق: $verifiedCount" -ForegroundColor Cyan
+
+if ($errors.Count -gt 0) {
+    Write-Host ""
+    Write-Host "❌ الملفات التي حدث فيها خطأ:" -ForegroundColor Red
+    foreach ($error in $errors) {
+        Write-Host "   - $error" -ForegroundColor Red
+    }
+}
+
+# ============================================
+# 5. عرض عينة من الملف المصحح
+# ============================================
+if ($files.Count -gt 0) {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  📝 عينة من الملف المصحح  " -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+    
+    $sampleFile = $files[0]
+    $content = Get-Content -Path $sampleFile.FullName -Raw -Encoding UTF8
+    
+    # عرض أول 20 سطراً فقط
+    $lines = $content -split "`r`n" | Select-Object -First 20
+    Write-Host "📄 $($sampleFile.Name):" -ForegroundColor Yellow
+    Write-Host ""
+    foreach ($line in $lines) {
+        Write-Host $line -ForegroundColor Gray
+    }
+    Write-Host ""
+    Write-Host "... (تم عرض أول 20 سطراً)" -ForegroundColor Gray
+}
+
+Write-Host ""
+Write-Host "✅ اكتملت العملية!" -ForegroundColor Green
+Write-Host ""
+Write-Host "🚀 الآن يمكنك تشغيل:" -ForegroundColor Cyan
+Write-Host "   npx opennextjs-cloudflare build" -ForegroundColor White
