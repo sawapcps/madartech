@@ -13,11 +13,5 @@
       "database_name": "madartech_platform",
       "database_id": "1e57a5a3-8705-4b28-ad17-7b7a1e5c7fa6"
     }
-  ],
-  "routes": [
-    {
-      "pattern": "cloud.madartech.uk",
-      "custom_domain": true
-    }
   ]
 }
