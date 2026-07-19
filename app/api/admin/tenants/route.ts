@@ -11,9 +11,6 @@ export async function OPTIONS() {
     return new NextResponse(null, { status: 200, headers: CORS });
 }
 
-// ============================================================
-// ✅ GET - جلب جميع العملاء
-// ============================================================
 export async function GET(req: NextRequest) {
     try {
         const env = (req as any).env || process.env;
@@ -37,9 +34,6 @@ export async function GET(req: NextRequest) {
     }
 }
 
-// ============================================================
-// ✅ POST - إضافة أو تحديث عميل
-// ============================================================
 export async function POST(req: NextRequest) {
     try {
         const env = (req as any).env || process.env;
@@ -114,6 +108,15 @@ export async function POST(req: NextRequest) {
             }, { status: 409, headers: CORS });
         }
 
+        // ✅ إنشاء subdomain من الاسم (تحويل إلى slug)
+        const subdomain = name
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '')
+            .substring(0, 30);
+
+        // ✅ إنشاء api_key
         const apiKey = `key_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
         const result = await db
@@ -121,8 +124,8 @@ export async function POST(req: NextRequest) {
                 INSERT INTO tenants (
                     name, email, phone, company, status,
                     storage_limit_mb, db_limit_mb, api_key, notes,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                    subdomain, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
             `)
             .bind(
                 name,
@@ -133,7 +136,8 @@ export async function POST(req: NextRequest) {
                 storage_limit_mb || 5120,
                 db_limit_mb || 1024,
                 apiKey,
-                notes || null
+                notes || null,
+                subdomain
             )
             .run();
 
@@ -157,9 +161,6 @@ export async function POST(req: NextRequest) {
     }
 }
 
-// ============================================================
-// ✅ DELETE - حذف عميل
-// ============================================================
 export async function DELETE(req: NextRequest) {
     try {
         const env = (req as any).env || process.env;
