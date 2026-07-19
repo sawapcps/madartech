@@ -58,10 +58,12 @@ export function verifyJWT(token: string): Record<string, unknown> | null {
 /**
  * Authenticate a user with email and password.
  */
-export async function authenticateUser(email: string, password: string) {
+export async function authenticateUser(email: string, password: string, env?: any) {
+  // ✅ استخدام ? بدلاً من $1, $2 (مناسب لـ D1)
   const user = await dbQuerySingle<{ id: string; email: string; name: string; role: string; password_hash: string; status: string }>(
-    'SELECT id, email, name, role, password_hash, status FROM platform_users WHERE email = $1 AND status = $2',
-    [email, 'active']
+    'SELECT id, email, name, role, password_hash, status FROM users WHERE email = ? AND status = ?',
+    [email, 'active'],
+    env  // ← تمرير env
   );
 
   if (!user) return null;
