@@ -6,21 +6,29 @@
 // ✅ Cloudflare D1 (للإنتاج)
 // ============================================================
 
-let cachedDb: any = null;
+export async function getDb(env?: any) {
+    console.error('🔍 getDb called');
 
-export function getDb(env?: any) {
-    console.error('🔍 getDb called with env:', env ? 'env provided' : 'no env');
-
-    // 🚀 إذا تم تمرير env مباشرة
+    // 🚀 إذا تم تمرير env مباشرة (من API Route)
     if (env && env.DB) {
         console.error('✅ Using D1 from passed env');
         return env.DB;
     }
 
-    // 🔧 حاول الحصول من globalThis (للاختبار)
-    if ((globalThis as any).__env?.DB) {
-        console.error('✅ Using D1 from globalThis');
-        return (globalThis as any).__env.DB;
+    // 🌐 الحصول على env من getCloudflareContext
+    try {
+        console.error('🔍 Trying getCloudflareContext...');
+        const { getCloudflareContext } = await import('@opennextjs/cloudflare');
+        const ctx: any = await getCloudflareContext();
+        console.error('🔍 Context received:', ctx ? 'Yes' : 'No');
+
+        if (ctx?.env?.DB) {
+            console.error('✅ Using D1 from getCloudflareContext');
+            return ctx.env.DB;
+        }
+        console.error('⚠️ ctx.env.DB not found');
+    } catch (e) {
+        console.error('⚠️ getCloudflareContext error:', e);
     }
 
     console.error('❌ No database connection found');
@@ -36,7 +44,7 @@ export async function dbQuery<T = Record<string, unknown>>(
     params: unknown[] = [],
     env?: any
 ): Promise<T[]> {
-    const db = getDb(env);
+    const db = await getDb(env);
     const stmt = db.prepare(sql);
     const result = params.length > 0 ? await stmt.bind(...params).all() : await stmt.all();
     return result.results as T[];
@@ -47,7 +55,7 @@ export async function dbExec(
     params: unknown[] = [],
     env?: any
 ): Promise<number> {
-    const db = getDb(env);
+    const db = await getDb(env);
     const stmt = db.prepare(sql);
     const result = params.length > 0 ? await stmt.bind(...params).run() : await stmt.run();
     return result.meta?.changes || 0;
@@ -138,13 +146,13 @@ export async function dbDelete(
 }
 
 export async function dbRaw<T = Record<string, unknown>>(sql: string, env?: any): Promise<T[]> {
-    const db = getDb(env);
+    const db = await getDb(env);
     const result = await db.prepare(sql).all();
     return result.results as T[];
 }
 
 export async function dbRawExec(sql: string, env?: any): Promise<void> {
-    const db = getDb(env);
+    const db = await getDb(env);
     await db.exec(sql);
 }
 
