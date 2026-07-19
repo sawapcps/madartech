@@ -18,27 +18,28 @@ export async function OPTIONS() {
 
 export async function POST(req: NextRequest) {
     try {
-        console.log('🔍 Login attempt started');
+        // ✅ استخدام console.error للتأكد من ظهورها
+        console.error('🔍 Login attempt started');
 
         const { email, password } = await req.json();
-        console.log('📧 Email:', email);
-        console.log('🔑 Password length:', password?.length || 0);
+        console.error('📧 Email:', email);
+        console.error('🔑 Password received:', password ? 'Yes' : 'No');
 
         if (!email || !password) {
-            console.log('❌ Missing email or password');
+            console.error('❌ Missing email or password');
             return NextResponse.json({ error: 'Email and password are required' }, { status: 400, headers: CORS });
         }
 
-        console.log('🔍 Calling authenticateUser...');
+        console.error('🔍 Calling authenticateUser...');
         const result = await authenticateUser(email, password);
-        console.log('🔍 Result:', result ? 'User found' : 'No user found');
+        console.error('🔍 Result:', result ? 'User found' : 'No user found');
 
         if (!result) {
-            console.log('❌ Invalid credentials');
+            console.error('❌ Invalid credentials');
             return NextResponse.json({ error: 'Invalid credentials' }, { status: 401, headers: CORS });
         }
 
-        console.log('✅ Login successful for:', email);
+        console.error('✅ Login successful for:', email);
 
         const response = NextResponse.json({
             success: true,
@@ -59,8 +60,7 @@ export async function POST(req: NextRequest) {
         console.error('🔥 Login error:', err);
         console.error('🔥 Error stack:', err instanceof Error ? err.stack : 'No stack');
         return NextResponse.json({
-            error: err instanceof Error ? err.message : 'Unknown error',
-            details: err instanceof Error ? err.stack : 'No details'
+            error: err instanceof Error ? err.message : 'Unknown error'
         }, { status: 500, headers: CORS });
     }
 }
