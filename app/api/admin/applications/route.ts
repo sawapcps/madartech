@@ -1,145 +1,172 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
-import { dbQuery } from '@/lib/db/driver';
+import { getDb } from '@/lib/db/driver';
 
-// GET /api/admin/applications - List all applications
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id?: string }> }
-) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
+const CORS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
 
-    if (id) {
-      // Get specific application
-      const apps = await dbQuery(
-        'SELECT * FROM applications WHERE id = $1',
-        [id]
-      );
-      
-      if (!apps || apps.length === 0) {
-        return NextResponse.json({ error: 'Application not found' }, { status: 404 });
-      }
-      
-      return NextResponse.json({ success: true, data: apps[0] });
-    }
-
-    // List all applications
-    const apps = await dbQuery('SELECT * FROM applications ORDER BY created_at DESC');
-    return NextResponse.json({ success: true, data: apps });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500 }
-    );
-  }
+export async function OPTIONS() {
+    return new NextResponse(null, { status: 200, headers: CORS });
 }
 
-// POST /api/admin/applications - Create new application
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id?: string }> }
-) {
-  try {
-    const body = await req.json();
-    const { name, description, status } = body;
+export async function GET(req: NextRequest) {
+    try {
+        const env = (req as any).env || process.env;
+        const db = await getDb(env);
 
-    if (!name) {
-      return NextResponse.json(
-        { error: 'Name is required' },
-        { status: 400 }
-      );
+        const result = await db
+            .prepare('SELECT * FROM applications ORDER BY created_at DESC')
+            .all();
+
+        return NextResponse.json({
+            success: true,
+            data: result.results || [],
+        }, { headers: CORS });
+
+    } catch (error) {
+        console.error('❌ GET applications error:', error);
+        return NextResponse.json({
+            success: false,
+            error: error instanceof Error ? error.message : 'فشل جلب التطبيقات',
+        }, { status: 500, headers: CORS });
     }
-
-    const result = await dbQuery(
-      `INSERT INTO applications (name, description, status, created_at) 
-       VALUES ($1, $2, $3, CURRENT_TIMESTAMP) 
-       RETURNING *`,
-      [name, description || '', status || 'active']
-    );
-
-    return NextResponse.json({ success: true, data: result[0] });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500 }
-    );
-  }
 }
 
-// PUT /api/admin/applications - Update application
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<{ id?: string }> }
-) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
-    const body = await req.json();
+export async function POST(req: NextRequest) {
+    try {
+        const env = (req as any).env || process.env;
+        const db = await getDb(env);
+        const body = await req.json();
 
-    if (!id) {
-      return NextResponse.json(
-        { error: 'id query parameter is required' },
-        { status: 400 }
-      );
+        console.log('📥 POST applications - body:', body);
+
+        // ✅ معالجة التحديث (action: 'update')
+        if (body.action === 'update' && body.id) {
+            const { id, name, slug, description, version, status } = body;
+
+            await db
+                .prepare(`
+                    UPDATE applications SET
+                        name = ?,
+                        slug = ?,
+                        description = ?,
+                        version = ?,
+                        status = ?,
+                        updated_at = datetime('now')
+                    WHERE id = ?
+                `)
+                .bind(
+                    name,
+                    slug,
+                    description || null,
+                    version || '1.0.0',
+                    status || 'active',
+                    id
+                )
+                .run();
+
+            const updated = await db
+                .prepare('SELECT * FROM applications WHERE id = ?')
+                .bind(id)
+                .all();
+
+            return NextResponse.json({
+                success: true,
+                data: updated.results?.[0] || null,
+                message: 'تم تحديث التطبيق بنجاح',
+            }, { headers: CORS });
+        }
+
+        // ✅ إضافة تطبيق جديد
+        const { name, slug, description, version, status } = body;
+
+        if (!name || !slug) {
+            return NextResponse.json({
+                success: false,
+                error: 'الاسم والـ slug مطلوبان',
+            }, { status: 400, headers: CORS });
+        }
+
+        // التحقق من عدم تكرار الـ slug
+        const existing = await db
+            .prepare('SELECT id FROM applications WHERE slug = ?')
+            .bind(slug)
+            .all();
+
+        if (existing.results && existing.results.length > 0) {
+            return NextResponse.json({
+                success: false,
+                error: 'الـ slug مستخدم بالفعل',
+            }, { status: 409, headers: CORS });
+        }
+
+        const result = await db
+            .prepare(`
+                INSERT INTO applications (
+                    name, slug, description, version, status,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            `)
+            .bind(
+                name,
+                slug,
+                description || null,
+                version || '1.0.0',
+                status || 'active'
+            )
+            .run();
+
+        const newApp = await db
+            .prepare('SELECT * FROM applications WHERE id = ?')
+            .bind(result.meta?.last_row_id || 0)
+            .all();
+
+        return NextResponse.json({
+            success: true,
+            data: newApp.results?.[0] || null,
+            message: 'تم إضافة التطبيق بنجاح',
+        }, { headers: CORS });
+
+    } catch (error) {
+        console.error('❌ POST applications error:', error);
+        return NextResponse.json({
+            success: false,
+            error: error instanceof Error ? error.message : 'فشل إضافة التطبيق',
+        }, { status: 500, headers: CORS });
     }
-
-    const { name, description, status } = body;
-    
-    const result = await dbQuery(
-      `UPDATE applications 
-       SET name = COALESCE($1, name),
-           description = COALESCE($2, description),
-           status = COALESCE($3, status),
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $4
-       RETURNING *`,
-      [name, description, status, id]
-    );
-
-    if (!result || result.length === 0) {
-      return NextResponse.json({ error: 'Application not found' }, { status: 404 });
-    }
-
-    return NextResponse.json({ success: true, data: result[0] });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500 }
-    );
-  }
 }
 
-// DELETE /api/admin/applications - Delete application
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id?: string }> }
-) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
+export async function DELETE(req: NextRequest) {
+    try {
+        const env = (req as any).env || process.env;
+        const db = await getDb(env);
+        const url = new URL(req.url);
+        const id = url.searchParams.get('id');
 
-    if (!id) {
-      return NextResponse.json(
-        { error: 'id query parameter is required' },
-        { status: 400 }
-      );
+        if (!id) {
+            return NextResponse.json({
+                success: false,
+                error: 'معرف التطبيق مطلوب',
+            }, { status: 400, headers: CORS });
+        }
+
+        await db
+            .prepare('DELETE FROM applications WHERE id = ?')
+            .bind(id)
+            .run();
+
+        return NextResponse.json({
+            success: true,
+            message: 'تم حذف التطبيق بنجاح',
+        }, { headers: CORS });
+
+    } catch (error) {
+        console.error('❌ DELETE applications error:', error);
+        return NextResponse.json({
+            success: false,
+            error: error instanceof Error ? error.message : 'فشل حذف التطبيق',
+        }, { status: 500, headers: CORS });
     }
-
-    const result = await dbQuery(
-      'DELETE FROM applications WHERE id = $1 RETURNING *',
-      [id]
-    );
-
-    if (!result || result.length === 0) {
-      return NextResponse.json({ error: 'Application not found' }, { status: 404 });
-    }
-
-    return NextResponse.json({ success: true, data: result[0] });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500 }
-    );
-  }
 }

@@ -1,192 +1,185 @@
-﻿/*
- * Admin API - Tenant Management
- * GET    /api/admin/tenants - list all tenants
- * POST   /api/admin/tenants - create new tenant (creates schema automatically)
- * DELETE /api/admin/tenants?id=... - delete tenant (drops schema first, then row)
- * PUT    /api/admin/tenants?id=... - update tenant fields
- */
-
-import { NextRequest, NextResponse } from 'next/server';
-import { dbQuery, dbInsert, dbUpdate, dbDelete, dbQuerySingle } from '@/lib/db/driver';
-import { createTenantSchema, initAppTables, dropTenantSchema, Tenant } from '@/lib/tenant/manager';
+﻿import { NextRequest, NextResponse } from 'next/server';
+import { getDb } from '@/lib/db/driver';
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 export async function OPTIONS() {
-  return new NextResponse(null, { status: 200, headers: CORS });
+    return new NextResponse(null, { status: 200, headers: CORS });
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id?: string }> }
-) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
+export async function GET(req: NextRequest) {
+    try {
+        const env = (req as any).env || process.env;
+        const db = await getDb(env);
 
-    if (id) {
-      // Get single tenant
-      const tenant = await dbQuerySingle<Tenant>('SELECT * FROM tenants WHERE id = $1', [id]);
-      if (!tenant) {
-        return NextResponse.json({ error: 'Tenant not found' }, { status: 404, headers: CORS });
-      }
-      return NextResponse.json({ success: true, data: tenant }, { headers: CORS });
+        const result = await db
+            .prepare('SELECT id, name, email, phone, company, status, storage_limit_mb, db_limit_mb, notes, created_at, updated_at FROM tenants ORDER BY created_at DESC')
+            .all();
+
+        return NextResponse.json({
+            success: true,
+            data: result.results || [],
+        }, { headers: CORS });
+
+    } catch (error) {
+        console.error('❌ GET tenants error:', error);
+        return NextResponse.json({
+            success: false,
+            error: error instanceof Error ? error.message : 'فشل جلب العملاء',
+        }, { status: 500, headers: CORS });
     }
-
-    // List all tenants
-    const tenants = await dbQuery<Tenant>('SELECT * FROM tenants ORDER BY created_at DESC');
-    return NextResponse.json({ success: true, data: tenants }, { headers: CORS });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500, headers: CORS }
-    );
-  }
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id?: string }> }
-) {
-  try {
-    const body = await req.json();
-    const { name, email, phone, company, storage_limit_mb, db_limit_mb, notes } = body;
+export async function POST(req: NextRequest) {
+    try {
+        const env = (req as any).env || process.env;
+        const db = await getDb(env);
+        const body = await req.json();
 
-    if (!name || !email) {
-      return NextResponse.json(
-        { error: 'Name and email are required' },
-        { status: 400, headers: CORS }
-      );
+        console.log('📥 POST tenants - body:', body);
+
+        // ✅ معالجة التحديث (action: 'update')
+        if (body.action === 'update' && body.id) {
+            const { id, name, email, phone, company, status, storage_limit_mb, db_limit_mb, notes } = body;
+
+            await db
+                .prepare(`
+                    UPDATE tenants SET
+                        name = ?,
+                        email = ?,
+                        phone = ?,
+                        company = ?,
+                        status = ?,
+                        storage_limit_mb = ?,
+                        db_limit_mb = ?,
+                        notes = ?,
+                        updated_at = datetime('now')
+                    WHERE id = ?
+                `)
+                .bind(
+                    name,
+                    email,
+                    phone || null,
+                    company || null,
+                    status || 'active',
+                    storage_limit_mb || 5120,
+                    db_limit_mb || 1024,
+                    notes || null,
+                    id
+                )
+                .run();
+
+            const updated = await db
+                .prepare('SELECT * FROM tenants WHERE id = ?')
+                .bind(id)
+                .all();
+
+            return NextResponse.json({
+                success: true,
+                data: updated.results?.[0] || null,
+                message: 'تم تحديث العميل بنجاح',
+            }, { headers: CORS });
+        }
+
+        // ✅ إضافة عميل جديد
+        const { name, email, phone, company, status, storage_limit_mb, db_limit_mb, notes } = body;
+
+        if (!name || !email) {
+            return NextResponse.json({
+                success: false,
+                error: 'الاسم والبريد الإلكتروني مطلوبان',
+            }, { status: 400, headers: CORS });
+        }
+
+        // التحقق من عدم تكرار البريد
+        const existing = await db
+            .prepare('SELECT id FROM tenants WHERE email = ?')
+            .bind(email)
+            .all();
+
+        if (existing.results && existing.results.length > 0) {
+            return NextResponse.json({
+                success: false,
+                error: 'البريد الإلكتروني مستخدم بالفعل',
+            }, { status: 409, headers: CORS });
+        }
+
+        const apiKey = `key_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+        const result = await db
+            .prepare(`
+                INSERT INTO tenants (
+                    name, email, phone, company, status,
+                    storage_limit_mb, db_limit_mb, api_key, notes,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            `)
+            .bind(
+                name,
+                email,
+                phone || null,
+                company || null,
+                status || 'active',
+                storage_limit_mb || 5120,
+                db_limit_mb || 1024,
+                apiKey,
+                notes || null
+            )
+            .run();
+
+        const newClient = await db
+            .prepare('SELECT * FROM tenants WHERE id = ?')
+            .bind(result.meta?.last_row_id || 0)
+            .all();
+
+        return NextResponse.json({
+            success: true,
+            data: newClient.results?.[0] || null,
+            message: 'تم إضافة العميل بنجاح',
+        }, { headers: CORS });
+
+    } catch (error) {
+        console.error('❌ POST tenants error:', error);
+        return NextResponse.json({
+            success: false,
+            error: error instanceof Error ? error.message : 'فشل حفظ العميل',
+        }, { status: 500, headers: CORS });
     }
-
-    // Insert tenant with a temporary schema name (will be updated after schema creation)
-    const tenant = await dbInsert<Tenant>('tenants', {
-      name,
-      email,
-      phone: phone || null,
-      company: company || null,
-      storage_limit_mb: storage_limit_mb || 5120,
-      db_limit_mb: db_limit_mb || 1024,
-      notes: notes || null,
-      status: 'active',
-      schema_name: 'pending',
-    });
-
-    if (!tenant) {
-      return NextResponse.json(
-        { error: 'Failed to create tenant' },
-        { status: 500, headers: CORS }
-      );
-    }
-
-    // Create the isolated schema
-    const schemaName = await createTenantSchema(tenant.id);
-
-    return NextResponse.json({
-      success: true,
-      data: { ...tenant, schema_name: schemaName },
-      meta: { schema_created: true, schema_name: schemaName },
-    }, { status: 201, headers: CORS });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500, headers: CORS }
-    );
-  }
 }
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id?: string }> }
-) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
+export async function DELETE(req: NextRequest) {
+    try {
+        const env = (req as any).env || process.env;
+        const db = await getDb(env);
+        const url = new URL(req.url);
+        const id = url.searchParams.get('id');
 
-    if (!id) {
-      return NextResponse.json(
-        { error: 'id query parameter is required' },
-        { status: 400, headers: CORS }
-      );
+        if (!id) {
+            return NextResponse.json({
+                success: false,
+                error: 'معرف العميل مطلوب',
+            }, { status: 400, headers: CORS });
+        }
+
+        await db
+            .prepare('DELETE FROM tenants WHERE id = ?')
+            .bind(id)
+            .run();
+
+        return NextResponse.json({
+            success: true,
+            message: 'تم حذف العميل بنجاح',
+        }, { headers: CORS });
+
+    } catch (error) {
+        console.error('❌ DELETE tenants error:', error);
+        return NextResponse.json({
+            success: false,
+            error: error instanceof Error ? error.message : 'فشل حذف العميل',
+        }, { status: 500, headers: CORS });
     }
-
-    // Drop the tenant's isolated schema first, then remove the row.
-    await dropTenantSchema(id);
-    const deleted = await dbDelete('tenants', { id });
-
-    if (deleted === 0) {
-      return NextResponse.json(
-        { error: 'Tenant not found' },
-        { status: 404, headers: CORS }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: { id, deleted: true },
-      meta: { schema_dropped: true }
-    }, { headers: CORS });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500, headers: CORS }
-    );
-  }
-}
-
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<{ id?: string }> }
-) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
-
-    if (!id) {
-      return NextResponse.json(
-        { error: 'id query parameter is required' },
-        { status: 400, headers: CORS }
-      );
-    }
-
-    const body = await req.json();
-    const { name, email, phone, company, storage_limit_mb, db_limit_mb, notes, status } = body;
-
-    const updates: Record<string, unknown> = {};
-    if (name !== undefined) updates.name = name;
-    if (email !== undefined) updates.email = email;
-    if (phone !== undefined) updates.phone = phone;
-    if (company !== undefined) updates.company = company;
-    if (storage_limit_mb !== undefined) updates.storage_limit_mb = storage_limit_mb;
-    if (db_limit_mb !== undefined) updates.db_limit_mb = db_limit_mb;
-    if (notes !== undefined) updates.notes = notes;
-    if (status !== undefined) updates.status = status;
-
-    if (Object.keys(updates).length === 0) {
-      return NextResponse.json(
-        { error: 'No fields provided to update' },
-        { status: 400, headers: CORS }
-      );
-    }
-
-    const updated = await dbUpdate<Tenant>('tenants', updates, { id });
-
-    if (updated.length === 0) {
-      return NextResponse.json(
-        { error: 'Tenant not found' },
-        { status: 404, headers: CORS }
-      );
-    }
-
-    return NextResponse.json({ success: true, data: updated[0] }, { headers: CORS });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500, headers: CORS }
-    );
-  }
 }
