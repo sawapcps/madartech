@@ -1,8 +1,3 @@
-/*
- * Auth API — Login
- * POST /api/auth/login — authenticate with email/password, returns JWT
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateUser } from '@/lib/auth/jwt';
 
@@ -18,28 +13,26 @@ export async function OPTIONS() {
 
 export async function POST(req: NextRequest) {
     try {
-        // ✅ استخدام console.error للتأكد من ظهورها
         console.error('🔍 Login attempt started');
+
+        // 🔑 الحصول على env من الطلب
+        const env = (req as any).env || process.env;
+        console.error('🔍 Env available:', env ? 'Yes' : 'No');
+        console.error('🔍 env.DB available:', env?.DB ? 'Yes' : 'No');
 
         const { email, password } = await req.json();
         console.error('📧 Email:', email);
-        console.error('🔑 Password received:', password ? 'Yes' : 'No');
 
         if (!email || !password) {
-            console.error('❌ Missing email or password');
             return NextResponse.json({ error: 'Email and password are required' }, { status: 400, headers: CORS });
         }
 
-        console.error('🔍 Calling authenticateUser...');
-        const result = await authenticateUser(email, password);
-        console.error('🔍 Result:', result ? 'User found' : 'No user found');
+        console.error('🔍 Calling authenticateUser with env...');
+        const result = await authenticateUser(email, password, env);
 
         if (!result) {
-            console.error('❌ Invalid credentials');
             return NextResponse.json({ error: 'Invalid credentials' }, { status: 401, headers: CORS });
         }
-
-        console.error('✅ Login successful for:', email);
 
         const response = NextResponse.json({
             success: true,
@@ -58,7 +51,6 @@ export async function POST(req: NextRequest) {
         return response;
     } catch (err) {
         console.error('🔥 Login error:', err);
-        console.error('🔥 Error stack:', err instanceof Error ? err.stack : 'No stack');
         return NextResponse.json({
             error: err instanceof Error ? err.message : 'Unknown error'
         }, { status: 500, headers: CORS });
