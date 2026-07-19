@@ -25,6 +25,7 @@ jobs:
         run: npx opennextjs-cloudflare build
         env:
           NEXT_DISABLE_ESLINT: 1
+          NEXT_DISABLE_TURBOPACK: 1
 
       - name: Deploy to Cloudflare
         run: npx wrangler deploy
