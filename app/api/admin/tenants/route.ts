@@ -108,13 +108,17 @@ export async function POST(req: NextRequest) {
             }, { status: 409, headers: CORS });
         }
 
-        // ✅ إنشاء subdomain من الاسم (تحويل إلى slug)
-        const subdomain = name
+        // ✅ إنشاء subdomain فريد من الاسم + رقم عشوائي
+        const baseSubdomain = name
             .toLowerCase()
             .replace(/[^a-z0-9]/g, '-')
             .replace(/-+/g, '-')
             .replace(/^-|-$/g, '')
-            .substring(0, 30);
+            .substring(0, 20);
+
+        // ✅ إضافة رقم عشوائي لضمان uniqueness
+        const randomSuffix = Math.random().toString(36).substring(2, 6);
+        const subdomain = `${baseSubdomain}-${randomSuffix}`;
 
         // ✅ إنشاء api_key
         const apiKey = `key_${Date.now()}_${Math.random().toString(36).substring(7)}`;
