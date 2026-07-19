@@ -1,8 +1,8 @@
-{
+﻿{
   "name": "cloud",
+  "main": ".open-next/worker.js",
   "compatibility_date": "2026-06-05",
   "compatibility_flags": ["nodejs_compat"],
-  "main": ".open-next/worker.js",
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
@@ -16,8 +16,8 @@
   ],
   "routes": [
     {
-      "pattern": "cloud.madartech.uk/*",
-      "zone_name": "madartech.uk"
+      "pattern": "cloud.madartech.uk",
+      "custom_domain": true
     }
   ]
 }
