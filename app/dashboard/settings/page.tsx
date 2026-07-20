@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { RouteGuard } from '@/components/route-guard';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from '@/components/theme-provider';
@@ -25,43 +25,59 @@ export default function SettingsPage() {
 function SettingsContent() {
     const { user } = useAuth();
     const { theme, toggleTheme } = useTheme();
+    const [loading, setLoading] = useState(false);
+    const [email, setEmail] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [twoFactor, setTwoFactor] = useState(true);
     const [emailNotifs, setEmailNotifs] = useState(true);
     const [autoBackups, setAutoBackups] = useState(true);
     const [maintenanceMode, setMaintenanceMode] = useState(false);
     const [allowSignup, setAllowSignup] = useState(false);
-    const [loading, setLoading] = useState(false);
 
-    // ✅ حالة البريد الإلكتروني
-    const [email, setEmail] = useState(user?.email || '');
-    
-    // ✅ حالة كلمة المرور
-    const [newPassword, setNewPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
+    // ✅ تحميل البريد الإلكتروني من المستخدم
+    useEffect(() => {
+        if (user?.email) {
+            setEmail(user.email);
+        }
+    }, [user]);
 
-    // ✅ دالة حفظ الإعدادات العامة
-    const handleSaveSettings = async () => {
+    // ✅ دالة حفظ البريد الإلكتروني
+    const handleSaveEmail = async () => {
+        if (!email || email === user?.email) {
+            toast.info('لم يتم تغيير البريد الإلكتروني');
+            return;
+        }
+
         setLoading(true);
         try {
-            // حفظ البريد الإلكتروني إذا تغير
-            if (email !== user?.email) {
-                const res = await fetch('/api/admin/settings', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        key: 'email',
-                        value: email,
-                        user_id: user?.id || 1
-                    })
-                });
-                const data = await res.json();
-                if (!data.success) throw new Error(data.error);
-            }
+            console.log('📤 Sending email update:', { email, user_id: user?.id });
             
-            toast.success('تم حفظ الإعدادات بنجاح');
+            const res = await fetch('/api/admin/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    key: 'email',
+                    value: email,
+                    user_id: user?.id || 1
+                })
+            });
+
+            const data = await res.json();
+            console.log('📥 Response:', data);
+
+            if (data.success) {
+                toast.success('تم تحديث البريد الإلكتروني بنجاح');
+                // ✅ تحديث واجهة المستخدم
+                if (user) {
+                    user.email = email;
+                }
+            } else {
+                toast.error(data.error || 'فشل تحديث البريد الإلكتروني');
+            }
         } catch (error) {
-            console.error('❌ Save error:', error);
-            toast.error('فشل حفظ الإعدادات');
+            console.error('❌ Save email error:', error);
+            toast.error('حدث خطأ أثناء تحديث البريد الإلكتروني');
         } finally {
             setLoading(false);
         }
@@ -81,6 +97,8 @@ function SettingsContent() {
         
         setLoading(true);
         try {
+            console.log('📤 Sending password update:', { user_id: user?.id });
+            
             const res = await fetch('/api/admin/settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -90,15 +108,20 @@ function SettingsContent() {
                     user_id: user?.id || 1
                 })
             });
+
             const data = await res.json();
-            if (!data.success) throw new Error(data.error);
-            
-            toast.success('تم تحديث كلمة المرور بنجاح');
-            setNewPassword('');
-            setConfirmPassword('');
+            console.log('📥 Response:', data);
+
+            if (data.success) {
+                toast.success('تم تحديث كلمة المرور بنجاح');
+                setNewPassword('');
+                setConfirmPassword('');
+            } else {
+                toast.error(data.error || 'فشل تحديث كلمة المرور');
+            }
         } catch (error) {
             console.error('❌ Password error:', error);
-            toast.error('فشل تحديث كلمة المرور');
+            toast.error('حدث خطأ أثناء تحديث كلمة المرور');
         } finally {
             setLoading(false);
         }
@@ -140,11 +163,22 @@ function SettingsContent() {
                             </div>
                             <div className="space-y-2">
                                 <Label>بريد المدير</Label>
-                                <Input 
-                                    value={email} 
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    dir="ltr" 
-                                />
+                                <div className="flex gap-2">
+                                    <Input 
+                                        value={email} 
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        dir="ltr" 
+                                        className="flex-1"
+                                    />
+                                    <Button 
+                                        onClick={handleSaveEmail} 
+                                        disabled={loading || email === user?.email}
+                                        variant="outline"
+                                    >
+                                        <Save className="w-4 h-4 ml-2" />
+                                        حفظ
+                                    </Button>
+                                </div>
                             </div>
                             <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
                                 <div className="flex items-center gap-3">
@@ -165,12 +199,6 @@ function SettingsContent() {
                                     </div>
                                 </div>
                                 <Switch checked={allowSignup} onCheckedChange={setAllowSignup} />
-                            </div>
-                            <div className="flex justify-end pt-2">
-                                <Button onClick={handleSaveSettings} disabled={loading}>
-                                    <Save className="w-4 h-4 ml-2" />
-                                    {loading ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
-                                </Button>
                             </div>
                         </CardContent>
                     </Card>
@@ -228,7 +256,7 @@ function SettingsContent() {
                                     variant="outline" 
                                     className="mt-2" 
                                     onClick={handleUpdatePassword}
-                                    disabled={loading}
+                                    disabled={loading || !newPassword || !confirmPassword}
                                 >
                                     {loading ? 'جاري التحديث...' : 'تحديث كلمة المرور'}
                                 </Button>
@@ -256,7 +284,36 @@ function SettingsContent() {
                             <CardDescription>تخصيص الإشعارات المرسلة</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            {/* ... نفس المحتوى السابق ... */}
+                            <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                                <div className="flex items-center gap-3">
+                                    <Mail className="w-5 h-5 text-muted-foreground" />
+                                    <div>
+                                        <p className="text-sm font-medium">إشعارات البريد الإلكتروني</p>
+                                        <p className="text-xs text-muted-foreground">إرسال إشعارات عبر البريد للأحداث المهمة</p>
+                                    </div>
+                                </div>
+                                <Switch checked={emailNotifs} onCheckedChange={setEmailNotifs} />
+                            </div>
+                            <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                                <div className="flex items-center gap-3">
+                                    <Bell className="w-5 h-5 text-muted-foreground" />
+                                    <div>
+                                        <p className="text-sm font-medium">تنبيهات النظام</p>
+                                        <p className="text-xs text-muted-foreground">تنبيهات عند تجاوز الحدود أو الأخطاء</p>
+                                    </div>
+                                </div>
+                                <Switch defaultChecked />
+                            </div>
+                            <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                                <div className="flex items-center gap-3">
+                                    <Shield className="w-5 h-5 text-muted-foreground" />
+                                    <div>
+                                        <p className="text-sm font-medium">تنبيهات الأمان</p>
+                                        <p className="text-xs text-muted-foreground">إشعار عند محاولات الدخول المشبوهة</p>
+                                    </div>
+                                </div>
+                                <Switch defaultChecked />
+                            </div>
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -272,7 +329,47 @@ function SettingsContent() {
                             <CardDescription>إعدادات البنية التحتية والخدمات</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            {/* ... نفس المحتوى السابق ... */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>PostgreSQL URL</Label>
+                                    <Input defaultValue="postgresql://localhost:5432" dir="ltr" className="font-mono text-xs" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Redis URL</Label>
+                                    <Input defaultValue="redis://localhost:6379" dir="ltr" className="font-mono text-xs" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>MinIO Endpoint</Label>
+                                    <Input defaultValue="http://localhost:9000" dir="ltr" className="font-mono text-xs" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Socket.IO URL</Label>
+                                    <Input defaultValue="http://localhost:3001" dir="ltr" className="font-mono text-xs" />
+                                </div>
+                            </div>
+
+                            <Separator />
+
+                            <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                                <div className="flex items-center gap-3">
+                                    <Server className="w-5 h-5 text-muted-foreground" />
+                                    <div>
+                                        <p className="text-sm font-medium">النسخ الاحتياطي التلقائي</p>
+                                        <p className="text-xs text-muted-foreground">نسخ احتياطي يومي تلقائي لجميع العملاء</p>
+                                    </div>
+                                </div>
+                                <Switch checked={autoBackups} onCheckedChange={setAutoBackups} />
+                            </div>
+                            <div className="flex items-center justify-between p-3 rounded-lg bg-destructive/10">
+                                <div className="flex items-center gap-3">
+                                    <Shield className="w-5 h-5 text-destructive" />
+                                    <div>
+                                        <p className="text-sm font-medium">وضع الصيانة</p>
+                                        <p className="text-xs text-muted-foreground">إيقاف الوصول للمنصة مؤقتاً للصيانة</p>
+                                    </div>
+                                </div>
+                                <Switch checked={maintenanceMode} onCheckedChange={setMaintenanceMode} />
+                            </div>
                         </CardContent>
                     </Card>
                 </TabsContent>
