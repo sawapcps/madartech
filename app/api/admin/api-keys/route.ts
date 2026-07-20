@@ -1,148 +1,244 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
-import { dbQuery } from '@/lib/db/driver';
+import { getDb } from '@/lib/db/driver';
+import { generateApiKey, hashApiKey, getKeyPrefix } from '@/lib/auth/api-key';
 
-// GET /api/admin/api-keys - List all API keys
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id?: string }> }
-) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
+const CORS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
 
-    if (id) {
-      // Get specific API key
-      const keys = await dbQuery(
-        'SELECT * FROM api_keys WHERE id = $1',
-        [id]
-      );
-      
-      if (!keys || keys.length === 0) {
-        return NextResponse.json({ error: 'API key not found' }, { status: 404 });
-      }
-      
-      return NextResponse.json({ success: true, data: keys[0] });
-    }
-
-    // List all API keys
-    const keys = await dbQuery('SELECT * FROM api_keys ORDER BY created_at DESC');
-    return NextResponse.json({ success: true, data: keys });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500 }
-    );
-  }
+export async function OPTIONS() {
+    return new NextResponse(null, { status: 200, headers: CORS });
 }
 
-// POST /api/admin/api-keys - Create new API key
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id?: string }> }
-) {
-  try {
-    const body = await req.json();
-    const { name, permissions } = body;
+// ✅ GET - جلب جميع مفاتيح API
+export async function GET(req: NextRequest) {
+    try {
+        const env = (req as any).env || process.env;
+        const db = await getDb(env);
 
-    if (!name) {
-      return NextResponse.json(
-        { error: 'Name is required' },
-        { status: 400 }
-      );
+        const result = await db
+            .prepare(`
+                SELECT 
+                    ak.id,
+                    ak.name,
+                    ak.key_prefix,
+                    ak.tenant_id,
+                    ak.application_id,
+                    ak.permissions,
+                    ak.status,
+                    ak.expires_at,
+                    ak.last_used_at,
+                    ak.created_at,
+                    t.name as tenant_name,
+                    a.name as application_name
+                FROM api_keys ak
+                LEFT JOIN tenants t ON ak.tenant_id = t.id
+                LEFT JOIN applications a ON ak.application_id = a.id
+                ORDER BY ak.created_at DESC
+            `)
+            .all();
+
+        return NextResponse.json({
+            success: true,
+            data: result.results || [],
+        }, { headers: CORS });
+
+    } catch (error: any) {
+        console.error('❌ GET api-keys error:', error);
+        return NextResponse.json({
+            success: false,
+            error: error.message || 'فشل جلب مفاتيح API',
+        }, { status: 500, headers: CORS });
     }
-
-    // Generate API key
-    const apiKey = `ak_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-    
-    const result = await dbQuery(
-      `INSERT INTO api_keys (name, key, permissions, created_at) 
-       VALUES ($1, $2, $3, CURRENT_TIMESTAMP) 
-       RETURNING *`,
-      [name, apiKey, permissions || '{}']
-    );
-
-    return NextResponse.json({ success: true, data: result[0] });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500 }
-    );
-  }
 }
 
-// PUT /api/admin/api-keys - Update API key
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<{ id?: string }> }
-) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
-    const body = await req.json();
+// ✅ POST - إنشاء مفتاح API جديد
+export async function POST(req: NextRequest) {
+    try {
+        const env = (req as any).env || process.env;
+        const db = await getDb(env);
+        const body = await req.json();
 
-    if (!id) {
-      return NextResponse.json(
-        { error: 'id query parameter is required' },
-        { status: 400 }
-      );
+        const { tenant_id, application_id, name, expires_at } = body;
+
+        if (!tenant_id || !name) {
+            return NextResponse.json({
+                success: false,
+                error: 'tenant_id و name مطلوبان',
+            }, { status: 400, headers: CORS });
+        }
+
+        // إنشاء مفتاح API
+        const apiKey = generateApiKey();
+        const keyHash = hashApiKey(apiKey);
+        const keyPrefix = getKeyPrefix(apiKey);
+
+        const result = await db
+            .prepare(`
+                INSERT INTO api_keys (
+                    tenant_id, application_id, name,
+                    key_prefix, key_hash, permissions,
+                    status, expires_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            `)
+            .bind(
+                tenant_id,
+                application_id || null,
+                name,
+                keyPrefix,
+                keyHash,
+                JSON.stringify({ read: true, write: true }),
+                'active',
+                expires_at || null
+            )
+            .run();
+
+        // ✅ إنشاء جدول storage للعميل تلقائياً
+        try {
+            const schemaName = `tenant_${tenant_id}`;
+            await db
+                .prepare(`
+                    CREATE TABLE IF NOT EXISTS ${schemaName}.storage (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        file_name TEXT NOT NULL,
+                        file_path TEXT NOT NULL,
+                        file_size INTEGER,
+                        file_type TEXT,
+                        folder TEXT,
+                        company_id TEXT,
+                        table_name TEXT,
+                        record_id TEXT,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                `)
+                .run();
+            console.log(`✅ Created storage table for tenant ${tenant_id}`);
+        } catch (err) {
+            console.log(`⚠️ Storage table for tenant ${tenant_id} already exists or error:`, err);
+        }
+
+        const newKey = await db
+            .prepare('SELECT * FROM api_keys WHERE id = ?')
+            .bind(result.meta?.last_row_id || 0)
+            .all();
+
+        return NextResponse.json({
+            success: true,
+            data: newKey.results?.[0] || null,
+            meta: {
+                full_key: apiKey,
+                key_prefix: keyPrefix,
+            },
+            message: 'تم إنشاء مفتاح API بنجاح مع جدول التخزين',
+        }, { status: 201, headers: CORS });
+
+    } catch (error: any) {
+        console.error('❌ POST api-keys error:', error);
+        return NextResponse.json({
+            success: false,
+            error: error.message || 'فشل إنشاء مفتاح API',
+        }, { status: 500, headers: CORS });
     }
-
-    const { name, permissions, is_active } = body;
-    
-    const result = await dbQuery(
-      `UPDATE api_keys 
-       SET name = COALESCE($1, name),
-           permissions = COALESCE($2, permissions),
-           is_active = COALESCE($3, is_active),
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $4
-       RETURNING *`,
-      [name, permissions, is_active, id]
-    );
-
-    if (!result || result.length === 0) {
-      return NextResponse.json({ error: 'API key not found' }, { status: 404 });
-    }
-
-    return NextResponse.json({ success: true, data: result[0] });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500 }
-    );
-  }
 }
 
-// DELETE /api/admin/api-keys - Delete API key
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id?: string }> }
-) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
+// ✅ PUT - تحديث مفتاح API
+export async function PUT(req: NextRequest) {
+    try {
+        const env = (req as any).env || process.env;
+        const db = await getDb(env);
+        const url = new URL(req.url);
+        const id = url.searchParams.get('id');
+        const body = await req.json();
 
-    if (!id) {
-      return NextResponse.json(
-        { error: 'id query parameter is required' },
-        { status: 400 }
-      );
+        if (!id) {
+            return NextResponse.json({
+                success: false,
+                error: 'id مطلوب',
+            }, { status: 400, headers: CORS });
+        }
+
+        const { name, permissions, status, expires_at } = body;
+
+        let sql = 'UPDATE api_keys SET updated_at = datetime("now")';
+        const params: any[] = [];
+
+        if (name !== undefined) {
+            sql += ', name = ?';
+            params.push(name);
+        }
+        if (permissions !== undefined) {
+            sql += ', permissions = ?';
+            params.push(JSON.stringify(permissions));
+        }
+        if (status !== undefined) {
+            sql += ', status = ?';
+            params.push(status);
+        }
+        if (expires_at !== undefined) {
+            sql += ', expires_at = ?';
+            params.push(expires_at);
+        }
+
+        sql += ' WHERE id = ?';
+        params.push(id);
+
+        await db
+            .prepare(sql)
+            .bind(...params)
+            .run();
+
+        const updated = await db
+            .prepare('SELECT * FROM api_keys WHERE id = ?')
+            .bind(id)
+            .all();
+
+        return NextResponse.json({
+            success: true,
+            data: updated.results?.[0] || null,
+            message: 'تم تحديث مفتاح API بنجاح',
+        }, { headers: CORS });
+
+    } catch (error: any) {
+        console.error('❌ PUT api-keys error:', error);
+        return NextResponse.json({
+            success: false,
+            error: error.message || 'فشل تحديث مفتاح API',
+        }, { status: 500, headers: CORS });
     }
+}
 
-    const result = await dbQuery(
-      'DELETE FROM api_keys WHERE id = $1 RETURNING *',
-      [id]
-    );
+// ✅ DELETE - حذف مفتاح API
+export async function DELETE(req: NextRequest) {
+    try {
+        const env = (req as any).env || process.env;
+        const db = await getDb(env);
+        const url = new URL(req.url);
+        const id = url.searchParams.get('id');
 
-    if (!result || result.length === 0) {
-      return NextResponse.json({ error: 'API key not found' }, { status: 404 });
+        if (!id) {
+            return NextResponse.json({
+                success: false,
+                error: 'id مطلوب',
+            }, { status: 400, headers: CORS });
+        }
+
+        await db
+            .prepare('DELETE FROM api_keys WHERE id = ?')
+            .bind(id)
+            .run();
+
+        return NextResponse.json({
+            success: true,
+            message: 'تم حذف مفتاح API بنجاح',
+        }, { headers: CORS });
+
+    } catch (error: any) {
+        console.error('❌ DELETE api-keys error:', error);
+        return NextResponse.json({
+            success: false,
+            error: error.message || 'فشل حذف مفتاح API',
+        }, { status: 500, headers: CORS });
     }
-
-    return NextResponse.json({ success: true, data: result[0] });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500 }
-    );
-  }
 }
