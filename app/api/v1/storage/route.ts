@@ -26,13 +26,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'الملف مطلوب' }, { status: 400, headers: CORS });
         }
 
-        // التحقق من نوع الملف (صور فقط)
         const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
         if (!allowedTypes.includes(file.type)) {
             return NextResponse.json({ error: 'نوع الملف غير مدعوم. يرجى رفع صورة' }, { status: 400, headers: CORS });
         }
 
-        // التحقق من الحجم (max 5MB)
         if (file.size > 5 * 1024 * 1024) {
             return NextResponse.json({ error: 'حجم الصورة يتجاوز 5 ميغابايت' }, { status: 400, headers: CORS });
         }
@@ -40,7 +38,6 @@ export async function POST(req: NextRequest) {
         const buffer = Buffer.from(await file.arrayBuffer());
         const base64Data = buffer.toString('base64');
 
-        // إنشاء اسم فريد للملف
         const timestamp = Date.now();
         const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
         const filePath = `/storage/${folder}/${fileName}`;
@@ -63,8 +60,6 @@ export async function POST(req: NextRequest) {
             .run();
 
         const fileId = result.meta?.last_row_id || 0;
-
-        // رابط الصورة
         const imageUrl = `https://cloud.madartech.uk/api/v1/storage?id=${fileId}`;
 
         return NextResponse.json({
@@ -96,7 +91,6 @@ export async function GET(req: NextRequest) {
         const id = url.searchParams.get('id');
         const tenantId = url.searchParams.get('tenant_id') || '1';
 
-        // جلب ملف محدد بالمعرف
         if (id) {
             const result = await db
                 .prepare(`SELECT * FROM tenant_${tenantId}.storage WHERE id = ?`)
@@ -110,7 +104,6 @@ export async function GET(req: NextRequest) {
             const file = result.results[0] as any;
             const fileData = Buffer.from(file.file_data || '', 'base64');
 
-            // ✅ استخدام Response بدلاً من NextResponse للملفات
             const isImage = file.file_type?.startsWith('image/');
             
             if (isImage) {
@@ -122,7 +115,6 @@ export async function GET(req: NextRequest) {
                 });
             }
 
-            // تحميل الملف
             return new Response(fileData, {
                 headers: {
                     'Content-Type': file.file_type || 'application/octet-stream',
@@ -131,7 +123,6 @@ export async function GET(req: NextRequest) {
             });
         }
 
-        // جلب قائمة الملفات
         const result = await db
             .prepare(`SELECT id, file_name, file_path, file_size, file_type, folder, created_at FROM tenant_${tenantId}.storage ORDER BY created_at DESC`)
             .all();

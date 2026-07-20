@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { RouteGuard } from '@/components/route-guard';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/lib//auth-context';
 import { useTheme } from '@/components/theme-provider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,7 +23,7 @@ export default function SettingsPage() {
 }
 
 function SettingsContent() {
-    const { user } = useAuth();
+    const { user, updateUser } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const [loading, setLoading] = useState(false);
     const [email, setEmail] = useState('');
@@ -35,14 +35,14 @@ function SettingsContent() {
     const [maintenanceMode, setMaintenanceMode] = useState(false);
     const [allowSignup, setAllowSignup] = useState(false);
 
-    // ✅ تحميل البريد الإلكتروني من المستخدم
+    // ✅ تعيين البريد الإلكتروني من المستخدم
     useEffect(() => {
         if (user?.email) {
             setEmail(user.email);
         }
     }, [user]);
 
-    // ✅ دالة حفظ البريد الإلكتروني
+    // ✅ حفظ البريد الإلكتروني
     const handleSaveEmail = async () => {
         if (!email || email === user?.email) {
             toast.info('لم يتم تغيير البريد الإلكتروني');
@@ -67,11 +67,11 @@ function SettingsContent() {
             console.log('📥 Response:', data);
 
             if (data.success) {
-                toast.success('تم تحديث البريد الإلكتروني بنجاح');
-                // ✅ تحديث واجهة المستخدم
+                // ✅ تحديث حالة المستخدم فوراً
                 if (user) {
-                    user.email = email;
+                    updateUser({ ...user, email: email });
                 }
+                toast.success('تم تحديث البريد الإلكتروني بنجاح');
             } else {
                 toast.error(data.error || 'فشل تحديث البريد الإلكتروني');
             }
@@ -83,7 +83,7 @@ function SettingsContent() {
         }
     };
 
-    // ✅ دالة تحديث كلمة المرور
+    // ✅ تحديث كلمة المرور
     const handleUpdatePassword = async () => {
         if (newPassword !== confirmPassword) {
             toast.error('كلمة المرور الجديدة وتأكيدها غير متطابقين');
@@ -97,7 +97,7 @@ function SettingsContent() {
         
         setLoading(true);
         try {
-            console.log('📤 Sending password update:', { user_id: user?.id });
+            console.log('📤 Sending password update');
             
             const res = await fetch('/api/admin/settings', {
                 method: 'POST',
@@ -142,7 +142,7 @@ function SettingsContent() {
                     <TabsTrigger value="system">النظام</TabsTrigger>
                 </TabsList>
 
-                {/* General */}
+                {/* تبويب عام */}
                 <TabsContent value="general" className="space-y-4">
                     <Card>
                         <CardHeader>
@@ -169,6 +169,7 @@ function SettingsContent() {
                                         onChange={(e) => setEmail(e.target.value)}
                                         dir="ltr" 
                                         className="flex-1"
+                                        placeholder="البريد الإلكتروني"
                                     />
                                     <Button 
                                         onClick={handleSaveEmail} 
@@ -176,9 +177,10 @@ function SettingsContent() {
                                         variant="outline"
                                     >
                                         <Save className="w-4 h-4 ml-2" />
-                                        حفظ
+                                        {loading ? 'جاري...' : 'حفظ'}
                                     </Button>
                                 </div>
+                                <p className="text-xs text-muted-foreground">تغيير البريد الإلكتروني للمدير</p>
                             </div>
                             <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
                                 <div className="flex items-center gap-3">
@@ -204,7 +206,7 @@ function SettingsContent() {
                     </Card>
                 </TabsContent>
 
-                {/* Security */}
+                {/* تبويب الأمان */}
                 <TabsContent value="security" className="space-y-4">
                     <Card>
                         <CardHeader>
@@ -265,7 +267,10 @@ function SettingsContent() {
                             <Separator />
 
                             <div className="space-y-2">
-                                <Label className="flex items-center gap-2"><Key className="w-4 h-4" /> JWT انتهاء صلاحية الجلسة</Label>
+                                <Label className="flex items-center gap-2">
+                                    <Key className="w-4 h-4" /> 
+                                    JWT انتهاء صلاحية الجلسة
+                                </Label>
                                 <Input type="number" defaultValue="60" dir="ltr" />
                                 <p className="text-xs text-muted-foreground">مدة الجلسة بالدقائق قبل طلب إعادة تسجيل الدخول</p>
                             </div>
@@ -273,7 +278,7 @@ function SettingsContent() {
                     </Card>
                 </TabsContent>
 
-                {/* Notifications */}
+                {/* تبويب الإشعارات */}
                 <TabsContent value="notifications" className="space-y-4">
                     <Card>
                         <CardHeader>
@@ -318,7 +323,7 @@ function SettingsContent() {
                     </Card>
                 </TabsContent>
 
-                {/* System */}
+                {/* تبويب النظام */}
                 <TabsContent value="system" className="space-y-4">
                     <Card>
                         <CardHeader>
