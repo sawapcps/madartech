@@ -130,7 +130,7 @@ function LicensesContent() {
       toast.success('تم إنشاء الترخيص بنجاح');
       setDialogOpen(false);
       setFormData({ tenant_id: '', application_id: '', start_date: new Date().toISOString().split('T')[0], end_date: '', max_devices: 1 });
-      fetchLicenses();
+      await fetchLicenses(); // ✅ تحديث القائمة بعد الإضافة
     } catch {
       toast.error('فشل إنشاء الترخيص');
     }
@@ -146,7 +146,7 @@ function LicensesContent() {
         status: newStatus,
       });
       toast.success(newStatus === 'active' ? 'تم تفعيل الترخيص' : 'تم إيقاف الترخيص');
-      fetchLicenses();
+      await fetchLicenses(); // ✅ تحديث القائمة بعد تغيير الحالة
     } catch {
       toast.error('فشل تحديث حالة الترخيص');
     }
@@ -158,7 +158,7 @@ function LicensesContent() {
       await apiDelete(`/api/admin/licenses?id=${deleteTarget.id}`);
       toast.success('تم حذف الترخيص');
       setDeleteTarget(null);
-      fetchLicenses();
+      await fetchLicenses(); // ✅ تحديث القائمة بعد الحذف
     } catch {
       toast.error('فشل حذف الترخيص');
     }
