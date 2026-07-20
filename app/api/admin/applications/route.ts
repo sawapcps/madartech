@@ -25,11 +25,11 @@ export async function GET(req: NextRequest) {
             data: result.results || [],
         }, { headers: CORS });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('❌ GET applications error:', error);
         return NextResponse.json({
             success: false,
-            error: error instanceof Error ? error.message : 'فشل جلب التطبيقات',
+            error: error.message || 'فشل جلب التطبيقات',
         }, { status: 500, headers: CORS });
     }
 }
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 
         console.log('📥 POST applications - body:', body);
 
-        // ✅ معالجة التحديث (action: 'update')
+        // ✅ حالة التحديث (action: 'update')
         if (body.action === 'update' && body.id) {
             const { id, name, slug, description, version, status } = body;
 
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
                 `)
                 .bind(
                     name,
-                    slug,
+                    slug || name.toLowerCase().replace(/\s+/g, '-'),
                     description || null,
                     version || '1.0.0',
                     status || 'active',
@@ -80,41 +80,32 @@ export async function POST(req: NextRequest) {
         }
 
         // ✅ إضافة تطبيق جديد
-        const { name, slug, description, version, status } = body;
+        const { name, slug, description, version, status, tenant_id } = body;
 
-        if (!name || !slug) {
+        if (!name) {
             return NextResponse.json({
                 success: false,
-                error: 'الاسم والـ slug مطلوبان',
+                error: 'الاسم مطلوب',
             }, { status: 400, headers: CORS });
         }
 
-        // التحقق من عدم تكرار الـ slug
-        const existing = await db
-            .prepare('SELECT id FROM applications WHERE slug = ?')
-            .bind(slug)
-            .all();
-
-        if (existing.results && existing.results.length > 0) {
-            return NextResponse.json({
-                success: false,
-                error: 'الـ slug مستخدم بالفعل',
-            }, { status: 409, headers: CORS });
-        }
+        const finalSlug = slug || name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+        const finalTenantId = tenant_id || 1;
 
         const result = await db
             .prepare(`
                 INSERT INTO applications (
                     name, slug, description, version, status,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                    tenant_id, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
             `)
             .bind(
                 name,
-                slug,
+                finalSlug,
                 description || null,
                 version || '1.0.0',
-                status || 'active'
+                status || 'active',
+                finalTenantId
             )
             .run();
 
@@ -123,17 +114,43 @@ export async function POST(req: NextRequest) {
             .bind(result.meta?.last_row_id || 0)
             .all();
 
+        // ✅ إنشاء جدول storage للعميل تلقائياً
+        if (finalTenantId) {
+            try {
+                const schemaName = `tenant_${finalTenantId}`;
+                await db
+                    .prepare(`
+                        CREATE TABLE IF NOT EXISTS ${schemaName}.storage (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            file_name TEXT NOT NULL,
+                            file_path TEXT NOT NULL,
+                            file_size INTEGER,
+                            file_type TEXT,
+                            folder TEXT,
+                            company_id TEXT,
+                            table_name TEXT,
+                            record_id TEXT,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        )
+                    `)
+                    .run();
+                console.log(`✅ Created storage table for tenant ${finalTenantId}`);
+            } catch (err) {
+                console.log(`⚠️ Storage table for tenant ${finalTenantId} already exists or error:`, err);
+            }
+        }
+
         return NextResponse.json({
             success: true,
             data: newApp.results?.[0] || null,
-            message: 'تم إضافة التطبيق بنجاح',
+            message: 'تم إضافة التطبيق بنجاح مع إنشاء جدول التخزين',
         }, { headers: CORS });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('❌ POST applications error:', error);
         return NextResponse.json({
             success: false,
-            error: error instanceof Error ? error.message : 'فشل إضافة التطبيق',
+            error: error.message || 'فشل إضافة التطبيق',
         }, { status: 500, headers: CORS });
     }
 }
@@ -162,11 +179,11 @@ export async function DELETE(req: NextRequest) {
             message: 'تم حذف التطبيق بنجاح',
         }, { headers: CORS });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('❌ DELETE applications error:', error);
         return NextResponse.json({
             success: false,
-            error: error instanceof Error ? error.message : 'فشل حذف التطبيق',
+            error: error.message || 'فشل حذف التطبيق',
         }, { status: 500, headers: CORS });
     }
 }
