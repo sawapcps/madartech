@@ -11,7 +11,7 @@ export async function OPTIONS() {
     return new NextResponse(null, { status: 200, headers: CORS });
 }
 
-// ✅ POST - رفع ملف/صورة
+// ✅ POST - رفع ملف
 export async function POST(req: NextRequest) {
     try {
         const env = (req as any).env || process.env;
@@ -26,15 +26,10 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'الملف مطلوب' }, { status: 400, headers: CORS });
         }
 
-        // ✅ التحقق من نوع الملف (صور فقط)
-        const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
-        if (!allowedTypes.includes(file.type)) {
-            return NextResponse.json({ error: 'نوع الملف غير مدعوم. يرجى رفع صورة' }, { status: 400, headers: CORS });
-        }
-
-        // ✅ التحقق من الحجم (max 5MB)
-        if (file.size > 5 * 1024 * 1024) {
-            return NextResponse.json({ error: 'حجم الصورة يتجاوز 5 ميغابايت' }, { status: 400, headers: CORS });
+        // ✅ السماح بجميع أنواع الملفات (تم إزالة الفلتر)
+        // ✅ التحقق من الحجم (max 50MB)
+        if (file.size > 50 * 1024 * 1024) {
+            return NextResponse.json({ error: 'حجم الملف يتجاوز 50 ميغابايت' }, { status: 400, headers: CORS });
         }
 
         const buffer = Buffer.from(await file.arrayBuffer());
@@ -45,7 +40,7 @@ export async function POST(req: NextRequest) {
         const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
         const filePath = `/storage/${folder}/${fileName}`;
 
-        // ✅ استخدام جدول storage مع tenant_id
+        // ✅ تخزين الملف في قاعدة البيانات
         const result = await db
             .prepare(`
                 INSERT INTO storage (
@@ -96,6 +91,7 @@ export async function GET(req: NextRequest) {
         const db = await getDb(env);
         const url = new URL(req.url);
         const id = url.searchParams.get('id');
+        const download = url.searchParams.get('download');
         const tenantId = url.searchParams.get('tenant_id') || '1';
 
         // ✅ جلب ملف محدد بالمعرف
@@ -112,6 +108,17 @@ export async function GET(req: NextRequest) {
             const file = result.results[0] as any;
             const fileData = Buffer.from(file.file_data || '', 'base64');
 
+            // ✅ تحميل الملف (download=true)
+            if (download === 'true') {
+                return new Response(fileData, {
+                    headers: {
+                        'Content-Type': file.file_type || 'application/octet-stream',
+                        'Content-Disposition': `attachment; filename="${file.file_name}"`,
+                        'Cache-Control': 'public, max-age=31536000',
+                    },
+                });
+            }
+
             // ✅ عرض الصورة مباشرة
             const isImage = file.file_type?.startsWith('image/');
             
@@ -124,11 +131,12 @@ export async function GET(req: NextRequest) {
                 });
             }
 
-            // ✅ تحميل الملف
+            // ✅ عرض الملفات الأخرى (PDF, ZIP, إلخ)
             return new Response(fileData, {
                 headers: {
                     'Content-Type': file.file_type || 'application/octet-stream',
-                    'Content-Disposition': `attachment; filename="${file.file_name}"`,
+                    'Content-Disposition': `inline; filename="${file.file_name}"`,
+                    'Cache-Control': 'public, max-age=31536000',
                 },
             });
         }
