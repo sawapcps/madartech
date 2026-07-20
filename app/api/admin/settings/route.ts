@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
         const db = await getDb(env);
         const body = await req.json();
 
-        const { tenant_id, key, value, category } = body;
+        const { tenant_id, key, value, category, user_id } = body;
 
         if (!key) {
             return NextResponse.json({ 
@@ -52,25 +52,33 @@ export async function POST(req: NextRequest) {
             }, { status: 400, headers: CORS });
         }
 
-        // ✅ إذا كان المفتاح هو email أو password، قم بتحديث جدول users
-        if (key === 'email' || key === 'password') {
-            const userId = body.user_id || 1;
+        // ✅ إذا كان المفتاح هو email، قم بتحديث جدول users
+        if (key === 'email') {
+            const userId = user_id || 1;
             
-            if (key === 'email') {
-                await db
-                    .prepare('UPDATE users SET email = ? WHERE id = ?')
-                    .bind(value, userId)
-                    .run();
-            } else if (key === 'password') {
-                await db
-                    .prepare('UPDATE users SET password = ? WHERE id = ?')
-                    .bind(value, userId)
-                    .run();
-            }
+            await db
+                .prepare('UPDATE users SET email = ? WHERE id = ?')
+                .bind(value, userId)
+                .run();
 
             return NextResponse.json({
                 success: true,
-                message: `تم تحديث ${key === 'email' ? 'الإيميل' : 'كلمة المرور'} بنجاح`
+                message: 'تم تحديث الإيميل بنجاح'
+            }, { headers: CORS });
+        }
+
+        // ✅ إذا كان المفتاح هو password، قم بتحديث جدول users
+        if (key === 'password') {
+            const userId = user_id || 1;
+            
+            await db
+                .prepare('UPDATE users SET password = ? WHERE id = ?')
+                .bind(value, userId)
+                .run();
+
+            return NextResponse.json({
+                success: true,
+                message: 'تم تحديث كلمة المرور بنجاح'
             }, { headers: CORS });
         }
 

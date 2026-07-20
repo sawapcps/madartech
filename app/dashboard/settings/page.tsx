@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { RouteGuard } from '@/components/route-guard';
-import { useAuth } from '@/lib//auth-context';
+import { useAuth } from '@/lib/auth-context';
 import { useTheme } from '@/components/theme-provider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -110,7 +110,7 @@ function SettingsContent() {
             });
 
             const data = await res.json();
-            console.log('📥 Response:', data);
+            console.log('📥 Password Response:', data);
 
             if (data.success) {
                 toast.success('تم تحديث كلمة المرور بنجاح');
