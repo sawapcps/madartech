@@ -35,12 +35,17 @@ export async function POST(req: NextRequest) {
         const ip = req.headers.get('x-forwarded-for') || '127.0.0.1';
         await logLogin(result.user.id, '1', ip);
 
+        // ✅ تعديل هيكل الرد ليكون متوافقاً مع تطبيق المبيعات
         const response = NextResponse.json({
             success: true,
-            token: result.token,
-            user: result.user,
+            data: {
+                user: result.user,
+                token: result.token,
+                expires_in: '7d'
+            }
         }, { headers: CORS });
 
+        // ✅ تعيين الكوكي (اختياري)
         response.cookies.set('platform_token', result.token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
