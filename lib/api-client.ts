@@ -22,6 +22,18 @@ export async function apiPost<T = unknown>(path: string, body?: unknown): Promis
   return (data.data ?? data) as T;
 }
 
+// ✅ إضافة دالة PUT
+export async function apiPut<T = unknown>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || 'Request failed');
+  return (data.data ?? data) as T;
+}
+
 export async function apiPostFull<T = unknown>(path: string, body?: unknown): Promise<{ data: T; meta?: Record<string, unknown> }> {
   const res = await fetch(path, {
     method: 'POST',
