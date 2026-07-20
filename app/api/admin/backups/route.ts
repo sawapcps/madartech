@@ -11,7 +11,7 @@ export async function OPTIONS() {
     return new NextResponse(null, { status: 200, headers: CORS });
 }
 
-// ✅ GET - جلب النسخ الاحتياطية
+// ✅ GET - جلب النسخ الاحتياطية مع اسم العميل
 export async function GET(req: NextRequest) {
     try {
         const env = (req as any).env || process.env;
@@ -19,9 +19,10 @@ export async function GET(req: NextRequest) {
         const url = new URL(req.url);
         const tenantId = url.searchParams.get('tenant_id');
         const id = url.searchParams.get('id');
+        const download = url.searchParams.get('download');
 
-        // جلب نسخة واحدة بالمعرف
-        if (id) {
+        // ✅ تحميل ملف النسخة الاحتياطية
+        if (id && download === 'true') {
             const result = await db
                 .prepare('SELECT * FROM backups WHERE id = ?')
                 .bind(id)
@@ -32,8 +33,41 @@ export async function GET(req: NextRequest) {
             }
 
             const backup = result.results[0] as any;
+            const backupData = backup.backup_data || JSON.stringify({
+                tenant_id: backup.tenant_id,
+                exported_at: backup.created_at,
+                version: '1.0',
+                tables: {}
+            });
+
+            return new NextResponse(backupData, {
+                status: 200,
+                headers: {
+                    ...CORS,
+                    'Content-Type': 'application/json',
+                    'Content-Disposition': `attachment; filename="${backup.filename || `backup_${backup.id}.json`}"`,
+                },
+            });
+        }
+
+        // ✅ جلب نسخة واحدة بالمعرف (بدون تحميل)
+        if (id) {
+            const result = await db
+                .prepare(`
+                    SELECT b.*, t.name as tenant_name 
+                    FROM backups b
+                    LEFT JOIN tenants t ON b.tenant_id = t.id
+                    WHERE b.id = ?
+                `)
+                .bind(id)
+                .all();
+
+            if (!result.results || result.results.length === 0) {
+                return NextResponse.json({ error: 'Backup not found' }, { status: 404, headers: CORS });
+            }
+
+            const backup = result.results[0] as any;
             
-            // إرجاع البيانات مباشرة من قاعدة البيانات
             return NextResponse.json({
                 success: true,
                 data: backup,
@@ -41,25 +75,52 @@ export async function GET(req: NextRequest) {
             }, { headers: CORS });
         }
 
-        // جلب قائمة النسخ
-        let sql = 'SELECT id, tenant_id, filename, type, status, size_bytes, note, created_at FROM backups';
+        // ✅ جلب قائمة النسخ مع اسم العميل
+        let sql = `
+            SELECT 
+                b.id,
+                b.tenant_id,
+                b.client_id,
+                b.filename,
+                b.file_path,
+                b.file_size,
+                b.type,
+                b.status,
+                b.schedule,
+                b.note,
+                b.backup_data,
+                b.created_at,
+                b.updated_at,
+                b.restored_at,
+                b.restored_by,
+                t.name as tenant_name
+            FROM backups b
+            LEFT JOIN tenants t ON b.tenant_id = t.id
+        `;
         const params: string[] = [];
 
         if (tenantId) {
-            sql += ' WHERE tenant_id = ?';
+            sql += ' WHERE b.tenant_id = ?';
             params.push(tenantId);
         }
 
-        sql += ' ORDER BY created_at DESC';
+        sql += ' ORDER BY b.created_at DESC';
 
         const result = await db
             .prepare(sql)
             .bind(...params)
             .all();
 
+        // ✅ تحويل البيانات للتوافق مع الواجهة (size_bytes بدلاً من file_size)
+        const data = (result.results || []).map((row: any) => ({
+            ...row,
+            size_bytes: row.file_size || 0,
+            client_name: row.tenant_name || 'غير معروف'
+        }));
+
         return NextResponse.json({
             success: true,
-            data: result.results || []
+            data: data
         }, { headers: CORS });
 
     } catch (error: any) {
@@ -129,7 +190,7 @@ export async function POST(req: NextRequest) {
             .prepare(`
                 INSERT INTO backups (
                     tenant_id, client_id, type, status, schedule,
-                    size_bytes, filename, note, backup_data, created_at, updated_at
+                    file_size, filename, note, backup_data, created_at, updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
             `)
             .bind(
@@ -146,7 +207,12 @@ export async function POST(req: NextRequest) {
             .run();
 
         const newBackup = await db
-            .prepare('SELECT id, tenant_id, filename, type, status, size_bytes, note, created_at FROM backups WHERE id = ?')
+            .prepare(`
+                SELECT b.*, t.name as tenant_name 
+                FROM backups b
+                LEFT JOIN tenants t ON b.tenant_id = t.id
+                WHERE b.id = ?
+            `)
             .bind(result.meta?.last_row_id || 0)
             .all();
 
