@@ -4,7 +4,7 @@
 
 import { dbQuerySingle } from '@/lib/db/driver';
 import { createHash, randomBytes } from 'crypto';
-import bcrypt from 'bcryptjs';  // ✅ إضافة bcryptjs
+import bcrypt from 'bcrypt';
 
 export function hashPassword(password: string): string {
     const salt = randomBytes(16).toString('hex');
