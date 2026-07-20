@@ -17,7 +17,7 @@ type AuthContextType = {
     loading: boolean;
     signIn: (email: string, password: string) => Promise<{ error: string | null }>;
     signOut: () => Promise<void>;
-    updateUser: (user: PlatformUser) => void; // ? äÅÖÇáÉ ÇäÊÍÏêË ÇäáèÑê
+    updateUser: (user: PlatformUser) => void;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -32,7 +32,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<PlatformUser | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // ? ÊÍåêä ÇäåÓÊÎÏå åæ localStorage ÃèäÇë
     useEffect(() => {
         try {
             const savedUser = localStorage.getItem('user');
@@ -40,11 +39,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setUser(JSON.parse(savedUser));
             }
         } catch {
-            // ÊÌÇçä
+            // ignore
         }
     }, []);
 
-    // ? ÌäÈ ÈêÇæÇÊ ÇäåÓÊÎÏå åæ ÇäÎÇÏå
     useEffect(() => {
         fetch('/api/auth/me')
             .then(res => res.ok ? res.json() : null)
@@ -53,7 +51,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     setUser(data.user);
                     localStorage.setItem('user', JSON.stringify(data.user));
                 } else {
-                    // ÅÐÇ äå êãæ çæÇã åÓÊÎÏå¬ ÇåÓÍ localStorage
                     localStorage.removeItem('user');
                 }
                 setLoading(false);
@@ -86,13 +83,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
             await fetch('/api/auth/logout', { method: 'POST' });
         } catch {
-            // ÊÌÇçä
+            // ignore
         }
         setUser(null);
         localStorage.removeItem('user');
     };
 
-    // ? ÏÇäÉ ÊÍÏêË ÇäåÓÊÎÏå (ääÊÍÏêË ÇäáèÑê)
     const updateUser = (updatedUser: PlatformUser) => {
         setUser(updatedUser);
         localStorage.setItem('user', JSON.stringify(updatedUser));
