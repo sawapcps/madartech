@@ -4,6 +4,7 @@
 
 import { dbQuerySingle } from '@/lib/db/driver';
 import { createHash, randomBytes } from 'crypto';
+import bcrypt from 'bcryptjs';  // ✅ إضافة bcryptjs
 
 export function hashPassword(password: string): string {
     const salt = randomBytes(16).toString('hex');
@@ -39,35 +40,86 @@ export function verifyJWT(token: string): Record<string, unknown> | null {
     }
 }
 
-// ✅ authenticateUser يستخدم dbQuerySingle مع env اختياري
+// ✅ authenticateUser مع bcrypt
 export async function authenticateUser(email: string, password: string, env?: any) {
-    // dbQuerySingle الآن يحصل على env تلقائياً من getCloudflareContext
-    const user = await dbQuerySingle<{
-        id: string;
-        email: string;
-        name: string;
-        role: string;
-        password: string;
-        status: string
-    }>(
-        'SELECT id, email, name, role, password, status FROM users WHERE email = ? AND status = ?',
-        [email, 'active'],
-        env  // يمكن تمرير env أو تركه فارغاً (سيحصل عليه تلقائياً)
-    );
+    try {
+        console.log('🔍 authenticateUser - محاولة تسجيل الدخول:', email);
 
-    if (!user) return null;
+        const user = await dbQuerySingle<{
+            id: string;
+            email: string;
+            name: string;
+            role: string;
+            password: string;
+            status: string;
+            company_id: string;
+            is_active: number;
+        }>(
+            'SELECT id, email, name, role, password, status, company_id, is_active FROM users WHERE email = ?',
+            [email],
+            env
+        );
 
-    // تحقق من كلمة المرور (بدون تشفير حالياً)
-    if (user.password !== password) return null;
-
-    const token = createJWT({ userId: user.id, email: user.email, role: user.role });
-    return {
-        token,
-        user: {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: user.role
+        if (!user) {
+            console.log('❌ المستخدم غير موجود:', email);
+            return null;
         }
-    };
+
+        console.log('✅ المستخدم موجود:', user.id);
+        console.log('🔑 كلمة المرور المخزنة (جزئياً):', user.password ? user.password.substring(0, 20) + '...' : 'undefined');
+
+        // ✅ استخدام bcrypt لمقارنة كلمة المرور
+        let passwordMatch = false;
+        try {
+            passwordMatch = await bcrypt.compare(password, user.password);
+            console.log('📊 نتيجة مقارنة bcrypt:', passwordMatch);
+        } catch (bcryptError) {
+            console.error('❌ خطأ في bcrypt.compare:', bcryptError);
+            // ✅ إذا فشل bcrypt، جرب المقارنة المباشرة (للتوافق مع الإصدارات القديمة)
+            if (user.password === password) {
+                passwordMatch = true;
+                console.log('📊 نتيجة المقارنة المباشرة (قديم): true');
+            }
+        }
+
+        if (!passwordMatch) {
+            console.log('❌ كلمة المرور غير صحيحة');
+            return null;
+        }
+
+        // ✅ التحقق من is_active
+        if (user.is_active !== 1) {
+            console.log('❌ المستخدم غير نشط:', user.id);
+            return null;
+        }
+
+        // ✅ التحقق من status
+        if (user.status !== 'active') {
+            console.log('❌ المستخدم غير مفعل:', user.id);
+            return null;
+        }
+
+        console.log('🎉 تم التحقق من كلمة المرور بنجاح!');
+
+        const token = createJWT({ 
+            userId: user.id, 
+            email: user.email, 
+            role: user.role,
+            company_id: user.company_id
+        });
+
+        return {
+            token,
+            user: {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                role: user.role,
+                company_id: user.company_id
+            }
+        };
+    } catch (error) {
+        console.error('❌ خطأ في authenticateUser:', error);
+        return null;
+    }
 }
