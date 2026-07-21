@@ -22,55 +22,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // ✅ استخدام localStorage (كان يعمل)
     useEffect(() => {
-        const token = localStorage.getItem('platform_token');
-        if (token) {
-            fetch('/api/auth/me', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success && data.user) {
-                    setUser(data.user);
-                } else {
-                    localStorage.removeItem('platform_token');
+        const checkAuth = async () => {
+            try {
+                const response = await fetch('/api/auth/me', {
+                    credentials: 'include', // ✅ مهم لإرسال الكوكيز
+                    headers: {
+                        'Cache-Control': 'no-cache',
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Auth check:', data); // للتصحيح
+                    if (data.success && data.data?.user) {
+                        setUser(data.data.user);
+                    }
                 }
-            })
-            .catch(() => localStorage.removeItem('platform_token'))
-            .finally(() => setLoading(false));
-        } else {
-            setLoading(false);
-        }
+            } catch (error) {
+                console.error('Auth error:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        checkAuth();
     }, []);
 
     const login = async (email: string, password: string) => {
         try {
+            setLoading(true);
+            
             const response = await fetch('/api/auth/login', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password })
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include', // ✅ مهم لتلقي الكوكيز
+                body: JSON.stringify({ email, password }),
             });
 
             const data = await response.json();
-            
-            if (data.success) {
-                localStorage.setItem('platform_token', data.data.token);
-                setUser(data.data.user);
+            console.log('Login response:', data); // للتصحيح
+
+            if (response.ok && data.success) {
+                // ✅ المستخدم مسجل الدخول
+                if (data.data?.user) {
+                    setUser(data.data.user);
+                }
+                
+                // ✅ الانتقال للوحة التحكم
                 window.location.href = '/dashboard';
             } else {
                 alert(data.error || 'فشل تسجيل الدخول');
+                setLoading(false);
             }
         } catch (error) {
             console.error('Login error:', error);
             alert('حدث خطأ في تسجيل الدخول');
+            setLoading(false);
         }
     };
 
     const logout = async () => {
-        localStorage.removeItem('platform_token');
-        setUser(null);
-        window.location.href = '/';
+        try {
+            await fetch('/api/auth/logout', {
+                method: 'POST',
+                credentials: 'include',
+            });
+        } catch (error) {
+            console.error('Logout error:', error);
+        } finally {
+            setUser(null);
+            window.location.href = '/';
+        }
     };
 
     return (

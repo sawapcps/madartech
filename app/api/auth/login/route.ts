@@ -3,16 +3,17 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(req: NextRequest) {
     try {
         const { email, password } = await req.json();
-        
+
         console.log('🔍 محاولة تسجيل الدخول:', email);
 
         // ✅ بيانات ثابتة للتجربة
         if (email === 'sawapcps@gmail.com' && password === '123456') {
             // ✅ إنشاء توكن بسيط
             const token = 'test_token_' + Date.now() + '_' + Math.random().toString(36).substring(2, 10);
-            
+
             console.log('✅ تم إنشاء التوكن:', token);
-            
+
+            // ✅ إنشاء الـ Response مع البيانات
             const response = NextResponse.json({
                 success: true,
                 data: {
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
                     },
                     token: token
                 }
-            });
+            }); // ✅ أضف هذه الأقواس هنا!
 
             // ✅ تعيين الكوكي
             response.cookies.set('platform_token', token, {
