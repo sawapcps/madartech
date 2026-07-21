@@ -1,59 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateUser } from '@/lib/auth/jwt';
-
-const CORS = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
-
-export async function OPTIONS() {
-    return new NextResponse(null, { status: 200, headers: CORS });
-}
 
 export async function POST(req: NextRequest) {
     try {
-        const env = (req as any).env || process.env;
-        
         const { email, password } = await req.json();
-        if (!email || !password) {
-            return NextResponse.json(
-                { error: 'Email and password are required' },
-                { status: 400, headers: CORS }
-            );
+        
+        console.log('🔍 محاولة تسجيل الدخول:', email);
+
+        // ✅ بيانات وهمية للتجربة
+        if (email === 'sawapcps@gmail.com' && password === '123456') {
+            const token = 'test_token_' + Date.now();
+            
+            const response = NextResponse.json({
+                success: true,
+                data: {
+                    user: {
+                        id: 'user_001',
+                        email: 'sawapcps@gmail.com',
+                        name: 'مدير النظام',
+                        role: 'admin'
+                    },
+                    token: token
+                }
+            });
+
+            // ✅ تعيين الكوكي
+            response.cookies.set('platform_token', token, {
+                httpOnly: true,
+                secure: true,
+                sameSite: 'lax',
+                maxAge: 7 * 24 * 60 * 60,
+                path: '/',
+            });
+
+            return response;
         }
 
-        const result = await authenticateUser(email, password, env);
-        if (!result) {
-            return NextResponse.json(
-                { error: 'Invalid credentials' },
-                { status: 401, headers: CORS }
-            );
-        }
+        return NextResponse.json(
+            { error: 'بيانات الدخول غير صحيحة' },
+            { status: 401 }
+        );
 
-        const response = NextResponse.json({
-            success: true,
-            data: {
-                user: result.user,
-                token: result.token,
-                expires_in: '7d'
-            }
-        }, { headers: CORS });
-
-        response.cookies.set('platform_token', result.token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            maxAge: 7 * 24 * 60 * 60,
-            path: '/',
-        });
-
-        return response;
     } catch (err) {
         console.error('Login error:', err);
         return NextResponse.json(
             { error: err instanceof Error ? err.message : 'Unknown error' },
-            { status: 500, headers: CORS }
+            { status: 500 }
         );
     }
 }

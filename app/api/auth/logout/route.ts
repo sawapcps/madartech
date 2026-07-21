@@ -1,22 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const CORS = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
-
-export async function OPTIONS() {
-    return new NextResponse(null, { status: 200, headers: CORS });
-}
-
 export async function POST(req: NextRequest) {
-    const response = NextResponse.json(
-        { success: true },
-        { headers: CORS }
-    );
-
-    response.cookies.delete('platform_token');
-
-    return response;
+    try {
+        console.log('🔍 /api/auth/logout - بدء تسجيل الخروج');
+        
+        const response = NextResponse.json({ 
+            success: true,
+            message: 'تم تسجيل الخروج بنجاح'
+        });
+        
+        // ✅ حذف الكوكي
+        response.cookies.delete('platform_token');
+        
+        console.log('✅ تم حذف الكوكي');
+        
+        return response;
+        
+    } catch (err) {
+        console.error('❌ خطأ في تسجيل الخروج:', err);
+        return NextResponse.json(
+            { error: err instanceof Error ? err.message : 'Unknown error' },
+            { status: 500 }
+        );
+    }
 }
