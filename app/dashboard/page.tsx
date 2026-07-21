@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { RouteGuard } from '@/components/route-guard';
-import { apiGet } from '@/lib/api-client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -66,7 +65,6 @@ type DashboardStats = {
   recentLogs: AuditLog[];
 };
 
-// ✅ نوع البيانات الحقيقية من الـ API
 type SystemMetric = {
   recorded_at: string;
   cpu_usage: number;
@@ -77,6 +75,23 @@ type SystemMetric = {
   active_connections: number;
   db_query_avg_ms: number;
 };
+
+// ✅ دالة fetch بديلة عن apiGet
+async function apiFetch<T>(url: string): Promise<T> {
+  const response = await fetch(url, {
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+  
+  if (!response.ok) {
+    throw new Error(`API Error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  return data.data || data;
+}
 
 export default function DashboardPage() {
   return (
@@ -91,8 +106,6 @@ function DashboardContent() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [logs, setLogs] = useState<AuditLog[]>([]);
-  
-  // ✅ بيانات حقيقية من الـ API
   const [metrics, setMetrics] = useState<SystemMetric[]>([]);
   const [latestMetric, setLatestMetric] = useState<SystemMetric | null>(null);
 
@@ -100,16 +113,15 @@ function DashboardContent() {
     (async () => {
       try {
         const [dashStats, recentClients, metricsData] = await Promise.all([
-          apiGet<DashboardStats>('/api/admin/dashboard'),
-          apiGet<Client[]>('/api/admin/tenants'),
-          apiGet<{ data: SystemMetric[]; latest: SystemMetric }>('/api/admin/metrics'),
+          apiFetch<DashboardStats>('/api/admin/dashboard'),
+          apiFetch<Client[]>('/api/admin/tenants'),
+          apiFetch<{ data: SystemMetric[]; latest: SystemMetric }>('/api/admin/metrics'),
         ]);
         
         setStats(dashStats);
         setClients(recentClients);
         setLogs(dashStats.recentLogs ?? []);
         
-        // ✅ تعيين البيانات الحقيقية
         if (metricsData) {
           setMetrics(metricsData.data || []);
           setLatestMetric(metricsData.latest || null);
@@ -128,7 +140,6 @@ function DashboardContent() {
   const totalLicenses = stats?.totalLicenses ?? 0;
   const totalStorageLimit = clients.reduce((sum, c) => sum + (c.storage_limit_mb ?? 0), 0);
 
-  // ✅ استخدام البيانات الحقيقية للرسوم البيانية
   const chartData = metrics.length > 0 ? metrics.map((m) => ({
     time: new Date(m.recorded_at).toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' }),
     cpu: Number(m.cpu_usage) || 0,
@@ -181,7 +192,6 @@ function DashboardContent() {
     },
   ];
 
-  // ✅ عناصر حالة النظام من البيانات الحقيقية
   const systemHealthItems = latestMetric ? [
     { label: 'المعالج', value: `${Number(latestMetric.cpu_usage).toFixed(1)}%`, icon: Cpu, color: 'text-chart-1' },
     { label: 'الذاكرة', value: `${Number(latestMetric.ram_usage).toFixed(1)}%`, icon: MemoryStick, color: 'text-chart-2' },
@@ -193,13 +203,11 @@ function DashboardContent() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">لوحة التحكم</h1>
         <p className="text-muted-foreground mt-1">نظرة عامة على المنصة والأداء</p>
       </div>
 
-      {/* Stats grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => (
@@ -229,9 +237,7 @@ function DashboardContent() {
             ))}
       </div>
 
-      {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* CPU & RAM chart */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -290,7 +296,6 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
-        {/* System health mini-cards */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">حالة النظام</CardTitle>
@@ -316,9 +321,7 @@ function DashboardContent() {
         </Card>
       </div>
 
-      {/* Requests chart + Recent activity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Requests per minute */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -357,7 +360,6 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
-        {/* Recent activity */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">آخر النشاطات</CardTitle>
@@ -391,7 +393,6 @@ function DashboardContent() {
         </Card>
       </div>
 
-      {/* Recent clients table */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">أحدث العملاء</CardTitle>
