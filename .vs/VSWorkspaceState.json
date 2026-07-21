@@ -4,13 +4,13 @@
     "\\app",
     "\\app\\api",
     "\\app\\api\\admin",
-    "\\app\\api\\admin\\backups",
-    "\\app\\api\\admin\\backups\\upload",
+    "\\app\\api\\admin\\applications",
+    "\\app\\api\\admin\\tenants",
+    "\\app\\api\\auth\\login",
     "\\app\\dashboard",
-    "\\app\\dashboard\\applications",
-    "\\app\\dashboard\\backups",
-    "\\app\\dashboard\\clients"
+    "\\app\\dashboard\\clients",
+    "\\lib\\auth"
   ],
-  "SelectedNode": "\\app\\api\\admin\\backups\\upload\\route.ts",
+  "SelectedNode": "\\app\\api\\admin\\tenants\\route.ts",
   "PreviewInSolutionExplorer": false
 }

@@ -1,0 +1,534 @@
+أريد إنشاء تطبيق مبيعات سحابي (Cloud Sales App) متقدم واحترافي، متكامل بالكامل مع منصة MadarTech Cloud.
+
+---
+
+🎯 **نوع التطبيق:**
+تطبيق ويب (Web App) لإدارة المبيعات مصمم خصيصاً لمندوبي المبيعات والمديرين، مع واجهة مستخدم عصرية وسهلة الاستخدام.
+
+---
+
+🗄️ **قاعدة البيانات (متوافقة مع D1 - SQLite):**
+
+الجداول المطلوبة:
+
+1. customers (العملاء):
+- id, tenant_id, application_id, name, phone, email, address, city, country, customer_type (individual/company), total_purchases, total_debt, balance, status, notes, created_at, updated_at
+
+2. products (المنتجات):
+- id, tenant_id, application_id, name, barcode, sku, category, sub_category, price, cost, quantity, min_stock, max_stock, unit, weight, dimensions, image_url, description, is_active, created_at, updated_at
+
+3. sales (المبيعات/الفواتير):
+- id, tenant_id, application_id, customer_id, user_id, invoice_number, total_amount, paid_amount, remaining_amount, discount, tax, shipping_cost, sale_type (cash/credit/installment), status (pending/completed/cancelled), payment_method, notes, sale_date, created_at, updated_at
+
+4. sale_items (تفاصيل الفواتير):
+- id, tenant_id, application_id, sale_id, product_id, product_name, quantity, unit_price, total_price, discount, tax, created_at
+
+5. payments (المدفوعات):
+- id, tenant_id, application_id, sale_id, amount, payment_method, reference_number, status, payment_date, created_at
+
+6. users (المستخدمين):
+- id, tenant_id, email, password, name, role (admin/manager/sales_rep), status, created_at, updated_at
+
+7. settings (الإعدادات):
+- id, tenant_id, key, value, category, description, created_at, updated_at
+
+---
+
+🎨 **واجهة المستخدم (UI/UX):**
+
+- اللغة: العربية (RTL) مع دعم ثنائي اللغة (Arabic/English)
+- الوضع: داكن (Dark Mode) مع إمكانية التبديل إلى الوضع الفاتح
+- الألوان الرئيسية: Cyan (#00d4ff), Blue (#0099ff), مع تدرجات أنيقة
+- الخلفية: gradient مع تأثيرات Glassmorphism
+- الخط: Inter (مع دعم العربية)
+- الأيقونات: Lucide Icons
+- المكونات: Shadcn UI (مع تخصيص كامل)
+- الرسوم البيانية: Recharts أو Tremor
+
+---
+
+📱 **الصفحات المطلوبة:**
+
+1. **لوحة التحكم (Dashboard):**
+   - بطاقات إحصائية: إجمالي المبيعات، عدد العملاء، عدد الفواتير، المبيعات اليومية
+   - رسم بياني للمبيعات (آخر 7 أيام / آخر 30 يوماً)
+   - آخر الفواتير
+   - أهم العملاء
+
+2. **العملاء (Customers):**
+   - جدول مع خيارات: بحث، تصفية، ترتيب
+   - إضافة/تعديل/حذف عميل (مودال)
+   - صفحة تفاصيل العميل (history, sales, payments)
+
+3. **المنتجات (Products):**
+   - شبكة/جدول مع صور
+   - إضافة/تعديل/حذف منتج
+   - إدارة المخزون
+
+4. **الفواتير (Invoices):**
+   - إنشاء فاتورة جديدة (مع إضافة منتجات ديناميكياً)
+   - عرض الفواتير (جدول مع تصفية)
+   - طباعة الفاتورة (PDF)
+   - حالة الفاتورة (pending, paid, cancelled)
+
+5. **التقارير (Reports):**
+   - تقرير المبيعات (حسب العميل، حسب المنتج، حسب التاريخ)
+   - تقرير العملاء (الأكثر شراءً)
+   - تقرير المخزون
+
+6. **الإعدادات (Settings):**
+   - معلومات الشركة
+   - إعدادات الضريبة
+   - العملة
+
+7. **المصادقة (Authentication):**
+   - صفحة تسجيل الدخول (Login)
+   - حماية الصفحات (Route Guard)
+   - استخدام JWT من المنصة
+
+---
+
+🔌 **التكامل مع منصة MadarTech Cloud:**
+
+- المصادقة: X-API-Key header
+- قاعدة URL: https://cloud.madartech.uk/api/v1/
+- الـ API يجب أن يتعامل مع tenant_id و application_id
+- الـ API يجب أن يكون متوافقاً مع جداول D1
+
+---
+
+⚡ **الميزات المتقدمة المطلوبة:**
+
+- بحث متقدم مع اقتراحات (Debounced Search)
+- تصدير البيانات (CSV, Excel, PDF)
+- إشعارات (Toast Notifications)
+- وضع عدم الاتصال (Offline Mode) مع مزامنة تلقائية
+- سجل النشاطات (Audit Logs)
+- صلاحيات المستخدمين (RBAC)
+- دعم العملات المتعددة
+- دعم الضريبة (VAT)
+
+---
+
+📁 **هيكل المشروع (Next.js 14+ App Router):**
+
+app/
+├── (auth)/
+│   ├── login/
+│   └── layout.tsx
+├── (dashboard)/
+│   ├── page.tsx (Dashboard)
+│   ├── customers/
+│   ├── products/
+│   ├── invoices/
+│   ├── reports/
+│   └── settings/
+├── api/
+│   └── v1/
+│       ├── data/
+│       │   ├── customers/
+│       │   ├── products/
+│       │   └── sales/
+│       └── auth/
+├── components/
+│   ├── ui/ (Shadcn)
+│   ├── dashboard/ (Layout, Sidebar, Header)
+│   └── shared/ (Tables, Modals, Forms)
+└── lib/
+    ├── api-client.ts
+    ├── auth.ts
+    └── utils.ts
+
+---
+
+⚠️ **ملاحظات مهمة:**
+- يجب أن يكون الكود نظيفاً ومنظماً (Clean Code)
+- يجب استخدام TypeScript مع أنواع صارمة
+- يجب أن تكون المكونات قابلة لإعادة الاستخدام
+- يجب أن يكون التطبيق سريعاً (Optimized)
+- يجب أن يكون متوافقاً مع Cloudflare Workers
+
+الرجاء تزويدي بالكود الكامل والمتكامل للتطبيق.
+
+
+
+
+معلومات عامة  
+text
+أريد بناء تطبيق [نوع التطبيق] متكامل مع منصة MadarTech Cloud.
+
+---
+
+📌 **معلومات المنصة الأساسية:**
+- اسم المنصة: MadarTech Cloud
+- رابط المنصة: https://cloud.madartech.uk
+- نوع قاعدة البيانات: Cloudflare D1 (SQLite)
+- بيئة التشغيل: Cloudflare Workers / Next.js
+- المصادقة: JWT + X-API-Key
+- التخزين: جداول منفصلة لكل عميل (tenant_X.storage)
+- النسخ الاحتياطي: تخزين JSON في D1
+
+---
+
+🔑 **معلومات المصادقة (لجميع التطبيقات):**
+- المصادقة عبر: X-API-Key في الـ Headers
+- الـ API Key يتم إنشاؤه من لوحة التحكم
+- لكل تطبيق مفتاح API خاص به
+- كل مفتاح API مرتبط بـ tenant_id و application_id
+
+---
+
+🗄️ **هيكل قاعدة البيانات الأساسي (لجميع التطبيقات):**
+
+-- الجداول المشتركة (لجميع التطبيقات)
+1. tenants: id, name, subdomain, email, phone, company, address, city, country, status, storage_limit_mb, db_limit_mb, api_key, notes, created_at, updated_at
+
+2. users: id, tenant_id, email, password, name, role, status, created_at, updated_at
+
+3. applications: id, tenant_id, name, slug, description, version, status, settings, icon_url, created_at, updated_at
+
+4. licenses: id, license_key, tenant_id, application_id, start_date, end_date, max_devices, max_users, status, notes, created_at, updated_at
+
+5. api_keys: id, tenant_id, application_id, name, key_prefix, key_hash, permissions, status, expires_at, last_used_at, created_at, updated_at
+
+6. backups: id, tenant_id, client_id, filename, file_path, file_size, type, status, schedule, note, backup_data, created_at, updated_at, restored_at, restored_by
+
+7. logs: id, level, message, context, user_id, tenant_id, ip_address, created_at
+
+8. settings: id, tenant_id, key, value, category, description, is_public, created_at, updated_at
+
+9. devices: id, tenant_id, license_id, device_name, device_fingerprint, device_type, os_version, app_version, last_seen_at, is_active, created_at, updated_at
+
+10. notifications: id, user_id, tenant_id, type, title, message, link, is_read, created_at
+
+11. sessions: id, user_id, token, ip_address, user_agent, expires_at, is_active, created_at, updated_at
+
+12. audit_logs: id, user_id, tenant_id, action, entity_type, entity_id, details, ip_address, user_agent, status, created_at
+
+13. system_metrics: id, cpu_usage, ram_usage, storage_usage, requests_per_min, error_count, active_connections, db_query_avg_ms, network_in, network_out, response_time_avg, uptime_seconds, recorded_at
+
+14. storage: id, tenant_id, file_name, file_path, file_size, file_type, folder, company_id, table_name, record_id, metadata, is_public, uploaded_by, created_at, updated_at
+
+15. tenant_storage: id, tenant_id, file_name, file_path, file_size, file_type, folder, metadata, is_public, uploaded_by, created_at, updated_at
+
+---
+
+📌 **جداول التطبيق المطلوبة (حسب نوع التطبيق):**
+
+[هنا تضع الجداول الخاصة بتطبيقك، مثلاً إذا كان تطبيق مبيعات: customers, products, sales, invoice_items, payments]
+
+---
+
+🔌 **API العام (لجميع التطبيقات):**
+- base URL: https://cloud.madartech.uk/api/v1/
+- headers: { 'X-API-Key': 'YOUR_API_KEY' }
+- كل طلب يجب أن يمرر tenant_id و application_id
+
+نمط API:
+GET    /api/v1/data/[table]      - جلب البيانات
+POST   /api/v1/data/[table]      - إضافة سجل
+PUT    /api/v1/data/[table]/[id] - تحديث سجل
+DELETE /api/v1/data/[table]/[id] - حذف سجل
+
+---
+
+🎨 **واجهة المستخدم (لجميع التطبيقات):**
+- اللغة: العربية (RTL) مع دعم ثنائي اللغة
+- الوضع: داكن (Dark Mode) مع إمكانية التبديل
+- الألوان الأساسية: Cyan (#00d4ff) و Blue (#0099ff)
+- الخلفية: Gradient مع Glassmorphism
+- الخط: Inter (مع دعم العربية)
+- الأيقونات: Lucide Icons
+- المكونات: Shadcn UI
+- الرسوم البيانية: Recharts
+
+---
+
+📁 **هيكل المشروع العام:**
+app/
+├── (auth)/           # صفحات المصادقة
+├── (dashboard)/      # صفحات التطبيق الرئيسية
+├── api/              # API Routes
+├── components/       # المكونات المشتركة
+└── lib/              # المكتبات والمساعدات
+
+---
+
+⚠️ **متطلبات تقنية عامة:**
+- TypeScript مع أنواع صارمة
+- Next.js 14+ (App Router)
+- Tailwind CSS
+- React Hooks
+- Zustand أو Context API (لإدارة الحالة)
+- React Hook Form (للنماذج)
+- Zod (للتحقق من الصحة)
+
+---
+
+🚀 **ميزات عامة مطلوبة:**
+- بحث متقدم (Debounced Search)
+- تصدير البيانات (CSV, Excel, PDF)
+- إشعارات (Toast)
+- صلاحيات المستخدمين (RBAC)
+- سجل النشاطات (Audit Logs)
+- دعم العملات المتعددة
+- دعم الضريبة
+- طباعة التقارير والفواتير
+
+---
+
+الرجاء تزويدي بالكود الكامل والمتكامل للتطبيق وفقاً لهذه المواصفات.
+📋 ملخص المعلومات المطلوبة (للإجابة السريعة):
+النوع	المطلوب
+المنصة	MadarTech Cloud - https://cloud.madartech.uk
+قاعدة البيانات	Cloudflare D1 (SQLite)
+المصادقة	X-API-Key
+الجداول الأساسية	15 جدولاً (أرسلتها أعلاه)
+API	/api/v1/data/[table]
+الواجهة	RTL, Dark Mode, Shadcn UI, Lucide Icons
+الهيكل	Next.js 14+ App Router
+انسخ القالب وأرسله للمساعد، وسيحصل على كل المعلومات اللازمة! 🚀
+
+في حالة اريده يخزن سحابي على تطبيقي وبحالة اريد واجهة  الكترون او ماشابه اي تكون على كمبيوتر  التخزين على الكمبيوتر والتخزين على المنصة السحابية والمزامة والى اخره
+🤖 نعم! هذا سؤال ممتاز!
+أنت تريد تطبيقاً هجيناً (Hybrid) يعمل على:
+
+التخزين المحلي (Local Storage) - على الكمبيوتر
+
+التخزين السحابي (Cloud Storage) - على منصة MadarTech
+
+المزامنة (Sync) - بين الاثنين
+
+📋 الرسالة المطورة لحالة التطبيق الهجين:
+text
+أريد بناء تطبيق [نوع التطبيق] هجين (Hybrid App) يعمل على:
+
+1️⃣ **التخزين المحلي (Local):**
+- تخزين البيانات على الكمبيوتر باستخدام SQLite محلي أو IndexedDB
+- يعمل بدون إنترنت (Offline Mode)
+- سرعة عالية في الوصول للبيانات
+
+2️⃣ **التخزين السحابي (Cloud):**
+- تخزين البيانات على منصة MadarTech Cloud
+- متوافق مع Cloudflare D1
+- نسخ احتياطي تلقائي
+
+3️⃣ **المزامنة (Sync):**
+- مزامنة ثنائية الاتجاه (Two-way Sync)
+- مزامنة تلقائية عند الاتصال بالإنترنت
+- إدارة التعارضات (Conflict Resolution)
+- مزامنة انتقائية (اختيار الجداول التي تريد مزامنتها)
+
+---
+
+## 🎯 **متطلبات التطبيق الهجين:**
+
+### 1. **التخزين المحلي (Local Storage):**
+```typescript
+// هيكل التخزين المحلي
+interface LocalStorage {
+    // SQLite محلي
+    db: SQLiteDatabase;
+    
+    // البيانات المخزنة محلياً
+    tables: {
+        customers: LocalRecord[];
+        products: LocalRecord[];
+        sales: LocalRecord[];
+        // ... باقي الجداول
+    };
+    
+    // حالة المزامنة
+    syncStatus: {
+        lastSync: string;
+        pendingUpload: number;
+        pendingDownload: number;
+        conflicts: Conflict[];
+    };
+}
+2. التخزين السحابي (Cloud Storage):
+typescript
+// هيكل التخزين السحابي
+interface CloudStorage {
+    // منصة MadarTech Cloud
+    api: {
+        baseURL: 'https://cloud.madartech.uk/api/v1/';
+        headers: { 'X-API-Key': 'YOUR_API_KEY' };
+    };
+    
+    // البيانات المخزنة سحابياً
+    tables: {
+        customers: CloudRecord[];
+        products: CloudRecord[];
+        sales: CloudRecord[];
+        // ... باقي الجداول
+    };
+}
+3. المزامنة (Sync):
+typescript
+// نظام المزامنة
+interface SyncSystem {
+    // استراتيجيات المزامنة
+    strategy: 'cloud-first' | 'local-first' | 'merge';
+    
+    // توقيت المزامنة
+    timing: 'auto' | 'manual' | 'scheduled';
+    
+    // التعارضات
+    conflicts: Conflict[];
+    
+    // دوال المزامنة
+    sync(): Promise<SyncResult>;
+    resolveConflict(conflict: Conflict): Promise<void>;
+    getStatus(): SyncStatus;
+}
+🗄️ هيكل قاعدة البيانات (محلي + سحابي):
+sql
+-- كل جدول يحتوي على حقل إضافي للمزامنة
+CREATE TABLE customers (
+    id TEXT PRIMARY KEY,  -- UUID موحد
+    local_id TEXT,        -- معرف محلي
+    cloud_id TEXT,        -- معرف سحابي
+    tenant_id TEXT,
+    application_id TEXT,
+    name TEXT,
+    phone TEXT,
+    email TEXT,
+    address TEXT,
+    city TEXT,
+    country TEXT,
+    customer_type TEXT,
+    total_purchases REAL,
+    total_debt REAL,
+    status TEXT,
+    -- حقول المزامنة
+    sync_status TEXT DEFAULT 'pending',  -- pending, synced, conflict
+    sync_version INTEGER DEFAULT 1,       -- رقم الإصدار
+    last_modified DATETIME,               -- آخر تعديل
+    created_at DATETIME,
+    updated_at DATETIME
+);
+🔄 طرق المزامنة:
+1. مزامنة تلقائية (Auto Sync):
+عند الاتصال بالإنترنت
+
+كل X دقيقة
+
+عند إضافة/تعديل/حذف بيانات
+
+2. مزامنة يدوية (Manual Sync):
+زر "مزامنة الآن"
+
+اختيار الجداول المراد مزامنتها
+
+3. مزامنة مجدولة (Scheduled Sync):
+يومياً في وقت محدد
+
+أسبوعياً
+
+🛠️ التقنيات الموصى بها:
+المكون	التقنية
+التخزين المحلي	SQLite (electron) / IndexedDB (web)
+التخزين السحابي	Cloudflare D1
+المزامنة	CRDT / Operational Transformation
+التعارضات	Last Write Wins / Manual Resolution
+وضع عدم الاتصال	Service Worker / PWA
+📱 واجهة المستخدم:
+1. شريط الحالة (Status Bar):
+text
+[🟢 متصل] [🔄 جاري المزامنة] [📊 5 تعارضات] [☁️ 3 مرفوع]
+2. زر المزامنة:
+text
+[🔄 مزامنة الآن] [⏰ آخر مزامنة: 10:30 صباحاً]
+3. إدارة التعارضات:
+text
+⚠️ تعارض في بيانات العميل "أحمد محمد"
+[استخدام السحابي] [استخدام المحلي] [دمج]
+4. إعدادات المزامنة:
+text
+المزامنة التلقائية: [✅]
+المزامنة عند الاتصال: [✅]
+المزامنة كل: [30] دقيقة
+اختيار الجداول: [✅ العملاء] [✅ المنتجات] [✅ المبيعات]
+📝 الرسالة النهائية (جاهزة للنسخ):
+text
+أريد بناء تطبيق [نوع التطبيق] هجين يعمل على الكمبيوتر (Desktop) مع مزامنة سحابية مع منصة MadarTech Cloud.
+
+---
+
+## 🎯 **المتطلبات الأساسية:**
+
+1. **التخزين المحلي:**
+   - SQLite محلي على الكمبيوتر
+   - يعمل بدون إنترنت (Offline First)
+   - سرعة عالية
+
+2. **التخزين السحابي:**
+   - منصة MadarTech Cloud
+   - قاعدة بيانات Cloudflare D1
+   - متوافق مع الجداول الأساسية للمنصة
+
+3. **المزامنة:**
+   - مزامنة ثنائية الاتجاه (Local ↔ Cloud)
+   - مزامنة تلقائية عند الاتصال بالإنترنت
+   - إدارة التعارضات (Conflict Resolution)
+   - مزامنة انتقائية (اختيار الجداول)
+
+---
+
+## 🗄️ **هيكل الجداول (مع حقول المزامنة):**
+
+كل جدول يحتوي على:
+- id (UUID موحد)
+- local_id (معرف محلي)
+- cloud_id (معرف سحابي)
+- sync_status (pending/synced/conflict)
+- sync_version (رقم الإصدار)
+- last_modified (آخر تعديل)
+- created_at, updated_at
+
+---
+
+## 🔄 **طرق المزامنة:**
+
+1. **تلقائية:** عند الاتصال بالإنترنت أو كل X دقيقة
+2. **يدوية:** زر "مزامنة الآن"
+3. **مجدولة:** يومياً في وقت محدد
+
+---
+
+## 🛠️ **التقنيات الموصى بها:**
+- Electron (للتطبيق المكتبي)
+- SQLite (للتخزين المحلي)
+- Cloudflare D1 (للتخزين السحابي)
+- CRDT أو Operational Transformation (للمزامنة)
+- Service Worker (لوضع عدم الاتصال)
+
+---
+
+## 📱 **واجهة المستخدم:**
+- شريط حالة يظهر: حالة الاتصال، حالة المزامنة، عدد التعارضات
+- زر "مزامنة الآن"
+- إدارة التعارضات (اختيار السحابي/المحلي/دمج)
+- إعدادات المزامنة (توقيت، جداول)
+
+---
+
+## ⚡ **الميزات المتقدمة:**
+- مزامنة جزئية (Partial Sync) - مزامنة بيانات محددة فقط
+- ضغط البيانات (Data Compression)
+- تشفير البيانات (Encryption)
+- سجل المزامنة (Sync Logs)
+- استعادة البيانات (Data Recovery)
+
+---
+
+الرجاء تزويدي بالكود الكامل والمتكامل للتطبيق الهجين مع نظام المزامنة.
+📋 ملخص:
+النوع	الوصف
+تطبيق سحابي فقط	جميع البيانات على السحابة، يحتاج إنترنت
+تطبيق محلي فقط	جميع البيانات على الكمبيوتر، لا يحتاج إنترنت
+تطبيق هجين (Hybrid)	بيانات محلية + سحابية + مزامنة
+هل تريد مني إنشاء تطبيق هجين كامل مع نظام مزامنة؟ 🚀
+
+
