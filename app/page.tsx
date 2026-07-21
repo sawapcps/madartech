@@ -13,7 +13,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn, user, loading: authLoading } = useAuth();
+  const { login, user, loading: authLoading } = useAuth(); // ✅ تغيير signIn → login
   const router = useRouter();
 
   useEffect(() => {
@@ -24,12 +24,12 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     setLoading(true);
-    const { error } = await signIn(email, password);
-    if (error) {
-      setError(error);
+    try {
+      await login(email, password); // ✅ استخدام login بدلاً من signIn
+      // login يقوم بتوجيه المستخدم تلقائياً
+    } catch (err: any) {
+      setError(err.message || 'فشل تسجيل الدخول');
       setLoading(false);
-    } else {
-      router.push('/dashboard');
     }
   };
 
