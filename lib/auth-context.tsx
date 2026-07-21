@@ -1,7 +1,6 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 interface User {
     id: string;
@@ -24,8 +23,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
-    const router = useRouter();
 
+    // ✅ التحقق من التوكن عند تحميل الصفحة
     useEffect(() => {
         const token = localStorage.getItem('platform_token');
         if (token) {
@@ -49,6 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     }, []);
 
+    // ✅ تسجيل الدخول (بدون useRouter)
     const login = async (email: string, password: string) => {
         const response = await fetch('/api/auth/login', {
             method: 'POST',
@@ -60,18 +60,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (data.success) {
             localStorage.setItem('platform_token', data.data.token);
             setUser(data.data.user);
-            router.push('/dashboard');
+            // ✅ استخدام window.location بدلاً من useRouter
+            window.location.href = '/dashboard';
         } else {
             throw new Error(data.error || 'فشل تسجيل الدخول');
         }
     };
 
+    // ✅ تسجيل الخروج
     const logout = async () => {
         localStorage.removeItem('platform_token');
         setUser(null);
-        router.push('/login');
+        window.location.href = '/login';
     };
 
+    // ✅ تحديث بيانات المستخدم
     const refreshUser = async () => {
         const token = localStorage.getItem('platform_token');
         if (!token) return;
