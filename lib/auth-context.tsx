@@ -27,10 +27,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const checkAuth = async () => {
             try {
                 console.log('🔍 التحقق من المصادقة...');
+                
+                // ✅ محاولة قراءة التوكن من cookies مباشرة
                 const response = await fetch('/api/auth/me', {
-                    credentials: 'include', // ✅ مهم!
+                    credentials: 'include',
                     headers: {
-                        'Cache-Control': 'no-cache'
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
                     }
                 });
                 
@@ -43,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         console.log('✅ تم تسجيل الدخول:', data.data.user.email);
                     }
                 } else {
-                    console.log('❌ لم يتم العثور على جلسة');
+                    console.log('❌ لم يتم العثور على جلسة (401)');
                     setUser(null);
                 }
             } catch (error) {
@@ -65,10 +68,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
-                    'Cache-Control': 'no-cache'
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
                 },
                 body: JSON.stringify({ email, password }),
-                credentials: 'include' // ✅ مهم!
+                credentials: 'include'
             });
 
             const data = await response.json();
@@ -77,8 +81,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (data.success) {
                 setUser(data.data.user);
                 console.log('✅ تم تسجيل الدخول بنجاح');
-                // ✅ استخدام replace بدلاً من href لمنع التخزين المؤقت
-                window.location.replace('/dashboard');
+                // ✅ استخدام window.location.assign
+                window.location.assign('/dashboard');
             } else {
                 alert(data.error || 'فشل تسجيل الدخول');
             }
@@ -100,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.error('❌ Logout error:', error);
         } finally {
             setUser(null);
-            window.location.replace('/');
+            window.location.assign('/');
         }
     };
 
