@@ -1,17 +1,14 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-// ✅ تعريف أنواع المستخدم
 interface User {
     id: string;
     email: string;
     name: string;
     role: string;
-    company_id?: string;
 }
 
-// ✅ تعريف نوع الـ Context
 interface AuthContextType {
     user: User | null;
     loading: boolean;
@@ -19,32 +16,44 @@ interface AuthContextType {
     logout: () => Promise<void>;
 }
 
-// ✅ إنشاء الـ Context
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// ✅ مزود المصادقة
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // ✅ جلب المستخدم
+    // ✅ التحقق من المستخدم عند التحميل
     useEffect(() => {
-        fetch('/api/auth/me', {
-            credentials: 'include'
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                setUser(data.data.user);
+        const checkAuth = async () => {
+            try {
+                console.log('🔍 التحقق من المصادقة...');
+                const response = await fetch('/api/auth/me', {
+                    credentials: 'include'
+                });
+                
+                console.log('📝 رد /api/auth/me:', response.status);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.data?.user) {
+                        setUser(data.data.user);
+                        console.log('✅ تم تسجيل الدخول:', data.data.user.email);
+                    }
+                }
+            } catch (error) {
+                console.error('❌ خطأ في التحقق:', error);
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
-        })
-        .catch(() => setLoading(false));
+        };
+
+        checkAuth();
     }, []);
 
-    // ✅ تسجيل الدخول
     const login = async (email: string, password: string) => {
         try {
+            console.log('🔍 محاولة تسجيل الدخول:', email);
+            
             const response = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -53,40 +62,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
 
             const data = await response.json();
-            
+            console.log('📝 رد تسجيل الدخول:', data);
+
             if (data.success) {
                 setUser(data.data.user);
+                console.log('✅ تم تسجيل الدخول بنجاح');
                 window.location.href = '/dashboard';
             } else {
                 alert(data.error || 'فشل تسجيل الدخول');
             }
         } catch (error) {
-            console.error('Login error:', error);
+            console.error('❌ Login error:', error);
             alert('حدث خطأ في تسجيل الدخول');
         }
     };
 
-    // ✅ تسجيل الخروج
-    const logout = useCallback(async () => {
+    const logout = async () => {
         try {
             console.log('🔍 محاولة تسجيل الخروج...');
-            
-            const response = await fetch('/api/auth/logout', {
+            await fetch('/api/auth/logout', {
                 method: 'POST',
                 credentials: 'include'
             });
-
-            console.log('📝 رد الخروج:', response.status);
-            
-            setUser(null);
-            window.location.href = '/';
-            
+            console.log('✅ تم تسجيل الخروج');
         } catch (error) {
-            console.error('❌ خطأ في تسجيل الخروج:', error);
+            console.error('❌ Logout error:', error);
+        } finally {
             setUser(null);
             window.location.href = '/';
         }
-    }, []);
+    };
 
     return (
         <AuthContext.Provider value={{ user, loading, login, logout }}>
@@ -95,7 +100,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 }
 
-// ✅ Hook لاستخدام المصادقة
 export function useAuth() {
     const context = useContext(AuthContext);
     if (!context) {
