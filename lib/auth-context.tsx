@@ -28,7 +28,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             try {
                 console.log('🔍 التحقق من المصادقة...');
                 const response = await fetch('/api/auth/me', {
-                    credentials: 'include'
+                    credentials: 'include', // ✅ مهم!
+                    headers: {
+                        'Cache-Control': 'no-cache'
+                    }
                 });
                 
                 console.log('📝 رد /api/auth/me:', response.status);
@@ -39,9 +42,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         setUser(data.data.user);
                         console.log('✅ تم تسجيل الدخول:', data.data.user.email);
                     }
+                } else {
+                    console.log('❌ لم يتم العثور على جلسة');
+                    setUser(null);
                 }
             } catch (error) {
                 console.error('❌ خطأ في التحقق:', error);
+                setUser(null);
             } finally {
                 setLoading(false);
             }
@@ -56,9 +63,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             
             const response = await fetch('/api/auth/login', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Cache-Control': 'no-cache'
+                },
                 body: JSON.stringify({ email, password }),
-                credentials: 'include'
+                credentials: 'include' // ✅ مهم!
             });
 
             const data = await response.json();
@@ -67,7 +77,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (data.success) {
                 setUser(data.data.user);
                 console.log('✅ تم تسجيل الدخول بنجاح');
-                window.location.href = '/dashboard';
+                // ✅ استخدام replace بدلاً من href لمنع التخزين المؤقت
+                window.location.replace('/dashboard');
             } else {
                 alert(data.error || 'فشل تسجيل الدخول');
             }
@@ -89,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.error('❌ Logout error:', error);
         } finally {
             setUser(null);
-            window.location.href = '/';
+            window.location.replace('/');
         }
     };
 
