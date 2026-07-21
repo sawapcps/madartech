@@ -1,56 +1,68 @@
-﻿import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/db/driver";
+﻿import { NextRequest, NextResponse } from 'next/server';
+import { getDb } from '@/lib/db/driver';
 
-export async function POST(request: NextRequest) {
+// ✅ CORS Headers
+const CORS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
+};
+
+// ✅ دالة OPTIONS (مهمة لـ CORS - يتم استدعاؤها قبل POST)
+export async function OPTIONS() {
+    return new NextResponse(null, { 
+        status: 204, 
+        headers: CORS 
+    });
+}
+
+export async function POST(req: NextRequest) {
     try {
-        const env = (request as any).env || process.env;
+        const env = (req as any).env || process.env;
         const db = await getDb(env);
+        
+        const { sql, params } = await req.json();
 
-        const { sql, params } = await request.json();
+        console.log('📝 SQL:', sql);
+        console.log('📊 Params:', params);
 
-        if (!sql || sql.trim() === "") {
-            return NextResponse.json({
-                success: false,
-                error: "الاستعلام مطلوب"
-            }, { status: 400 });
+        if (!sql) {
+            return NextResponse.json({ 
+                success: false, 
+                error: 'SQL query is required' 
+            }, { 
+                status: 400, 
+                headers: CORS 
+            });
         }
 
-        // ✅ ✅ ✅ تم إزالة جميع القيود - أنت المدير!
-        // يمكنك تنفيذ أي استعلام تريده
-
+        // ✅ تنفيذ الاستعلام
         const startTime = Date.now();
-        let result;
-        
-        if (params && params.length > 0) {
-            const stmt = db.prepare(sql);
-            result = await stmt.bind(...params).all();
-        } else {
-            result = await db.prepare(sql).all();
-        }
-        
+        const result = await db.prepare(sql).bind(...(params || [])).all();
         const executionTime = Date.now() - startTime;
 
-        let columns: string[] = [];
-        if (result.results && result.results.length > 0) {
-            columns = Object.keys(result.results[0]);
-        }
-
-        return NextResponse.json({
-            success: true,
-            data: result.results || [],
-            rowCount: result.results?.length || 0,
-            executionTime: executionTime + "ms",
-            columns: columns
+        // ✅ التحقق من النتيجة
+        const data = result.results || [];
+        
+        // ✅ إرجاع النتيجة مع CORS
+        return NextResponse.json({ 
+            success: true, 
+            data: data,
+            rowCount: data.length,
+            executionTime: `${executionTime}ms`
+        }, { 
+            headers: CORS 
         });
 
     } catch (error: any) {
-        console.error("❌ SQL Error:", error);
-        return NextResponse.json({
-            success: false,
-            error: error.message || "خطأ في تنفيذ الاستعلام",
-            code: error.code,
-            detail: error.detail,
-            hint: error.hint
-        }, { status: 500 });
+        console.error('❌ SQL Error:', error);
+        
+        return NextResponse.json({ 
+            success: false, 
+            error: error.message || 'Internal server error'
+        }, { 
+            status: 500, 
+            headers: CORS 
+        });
     }
 }
