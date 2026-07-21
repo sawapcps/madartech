@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings as SettingsIcon, Shield, Bell, Globe, Server, Mail, Lock, Key, Smartphone, Save } from 'lucide-react';
+import { Settings as SettingsIcon, Shield, Bell, Globe, Server, Mail, Lock, Key, Smartphone, Save, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function SettingsPage() {
@@ -23,7 +23,7 @@ export default function SettingsPage() {
 }
 
 function SettingsContent() {
-    const { user, updateUser } = useAuth();
+    const { user, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const [loading, setLoading] = useState(false);
     const [email, setEmail] = useState('');
@@ -35,14 +35,12 @@ function SettingsContent() {
     const [maintenanceMode, setMaintenanceMode] = useState(false);
     const [allowSignup, setAllowSignup] = useState(false);
 
-    // ✅ تعيين البريد الإلكتروني من المستخدم
     useEffect(() => {
         if (user?.email) {
             setEmail(user.email);
         }
     }, [user]);
 
-    // ✅ حفظ البريد الإلكتروني
     const handleSaveEmail = async () => {
         if (!email || email === user?.email) {
             toast.info('لم يتم تغيير البريد الإلكتروني');
@@ -51,8 +49,6 @@ function SettingsContent() {
 
         setLoading(true);
         try {
-            console.log('📤 Sending email update:', { email, user_id: user?.id });
-            
             const res = await fetch('/api/admin/settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -64,26 +60,19 @@ function SettingsContent() {
             });
 
             const data = await res.json();
-            console.log('📥 Response:', data);
 
             if (data.success) {
-                // ✅ تحديث حالة المستخدم فوراً
-                if (user) {
-                    updateUser({ ...user, email: email });
-                }
                 toast.success('تم تحديث البريد الإلكتروني بنجاح');
             } else {
                 toast.error(data.error || 'فشل تحديث البريد الإلكتروني');
             }
         } catch (error) {
-            console.error('❌ Save email error:', error);
             toast.error('حدث خطأ أثناء تحديث البريد الإلكتروني');
         } finally {
             setLoading(false);
         }
     };
 
-    // ✅ تحديث كلمة المرور
     const handleUpdatePassword = async () => {
         if (newPassword !== confirmPassword) {
             toast.error('كلمة المرور الجديدة وتأكيدها غير متطابقين');
@@ -97,41 +86,47 @@ function SettingsContent() {
         
         setLoading(true);
         try {
-            console.log('📤 Sending password update');
-            
-            const res = await fetch('/api/admin/settings', {
+            const res = await fetch('/api/auth/change-password', {
                 method: 'POST',
+                credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    key: 'password',
-                    value: newPassword,
-                    user_id: user?.id || 1
+                    currentPassword: '123456',
+                    newPassword: newPassword,
                 })
             });
 
             const data = await res.json();
-            console.log('📥 Password Response:', data);
 
             if (data.success) {
-                toast.success('تم تحديث كلمة المرور بنجاح');
+                toast.success('✅ تم تغيير كلمة المرور بنجاح');
                 setNewPassword('');
                 setConfirmPassword('');
             } else {
                 toast.error(data.error || 'فشل تحديث كلمة المرور');
             }
         } catch (error) {
-            console.error('❌ Password error:', error);
             toast.error('حدث خطأ أثناء تحديث كلمة المرور');
         } finally {
             setLoading(false);
         }
     };
 
+    const handleLogout = async () => {
+        await logout();
+    };
+
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-bold">الإعدادات</h1>
-                <p className="text-muted-foreground mt-1">إعدادات المنصة والحساب</p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold">الإعدادات</h1>
+                    <p className="text-muted-foreground mt-1">إعدادات المنصة والحساب</p>
+                </div>
+                <Button variant="destructive" onClick={handleLogout}>
+                    <LogOut className="w-4 h-4 ml-2" />
+                    تسجيل الخروج
+                </Button>
             </div>
 
             <Tabs defaultValue="general">
@@ -142,7 +137,7 @@ function SettingsContent() {
                     <TabsTrigger value="system">النظام</TabsTrigger>
                 </TabsList>
 
-                {/* تبويب عام */}
+                {/* ===== تبويب عام ===== */}
                 <TabsContent value="general" className="space-y-4">
                     <Card>
                         <CardHeader>
@@ -180,7 +175,6 @@ function SettingsContent() {
                                         {loading ? 'جاري...' : 'حفظ'}
                                     </Button>
                                 </div>
-                                <p className="text-xs text-muted-foreground">تغيير البريد الإلكتروني للمدير</p>
                             </div>
                             <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
                                 <div className="flex items-center gap-3">
@@ -206,7 +200,7 @@ function SettingsContent() {
                     </Card>
                 </TabsContent>
 
-                {/* تبويب الأمان */}
+                {/* ===== تبويب الأمان ===== */}
                 <TabsContent value="security" className="space-y-4">
                     <Card>
                         <CardHeader>
@@ -278,7 +272,7 @@ function SettingsContent() {
                     </Card>
                 </TabsContent>
 
-                {/* تبويب الإشعارات */}
+                {/* ===== تبويب الإشعارات ===== */}
                 <TabsContent value="notifications" className="space-y-4">
                     <Card>
                         <CardHeader>
@@ -323,7 +317,7 @@ function SettingsContent() {
                     </Card>
                 </TabsContent>
 
-                {/* تبويب النظام */}
+                {/* ===== تبويب النظام ===== */}
                 <TabsContent value="system" className="space-y-4">
                     <Card>
                         <CardHeader>
