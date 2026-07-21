@@ -2,12 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(req: NextRequest) {
     try {
-        // ✅ محاولة قراءة التوكن من cookies
-        const token = req.cookies.get('platform_token')?.value;
-        
+        // ✅ محاولة قراءة التوكن من Authorization header
+        const authHeader = req.headers.get('authorization');
+        let token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+        // ✅ إذا لم يكن في الـ Header، جرب من الكوكيز
+        if (!token) {
+            token = req.cookies.get('platform_token')?.value || null;
+        }
+
         console.log('🔍 /api/auth/me - التوكن:', token ? 'موجود' : 'غير موجود');
 
-        // ✅ إذا لم يكن هناك توكن، نرجع 401
         if (!token) {
             return NextResponse.json(
                 { error: 'Not authenticated' },
@@ -15,8 +20,6 @@ export async function GET(req: NextRequest) {
             );
         }
 
-        // ✅ التحقق البسيط من التوكن (بدون مكتبة خارجية)
-        // مجرد التحقق من أن التوكن يبدأ بـ 'test_token_'
         if (!token.startsWith('test_token_')) {
             return NextResponse.json(
                 { error: 'Invalid token' },
@@ -24,7 +27,6 @@ export async function GET(req: NextRequest) {
             );
         }
 
-        // ✅ إرجاع بيانات المستخدم
         return NextResponse.json({
             success: true,
             data: {
