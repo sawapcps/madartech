@@ -1,106 +1,99 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
-type PlatformUser = {
+interface User {
     id: string;
     email: string;
     name: string;
     role: string;
-    tenant_id?: string;
-    phone?: string;
-    company?: string;
-};
+    company_id: string;
+}
 
-type AuthContextType = {
-    user: PlatformUser | null;
+interface AuthContextType {
+    user: User | null;
     loading: boolean;
-    signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-    signOut: () => Promise<void>;
-    updateUser: (user: PlatformUser) => void;
-};
+    login: (email: string, password: string) => Promise<void>;
+    logout: () => Promise<void>;
+    refreshUser: () => Promise<void>;
+}
 
-const AuthContext = createContext<AuthContextType>({
-    user: null,
-    loading: true,
-    signIn: async () => ({ error: 'Not initialized' }),
-    signOut: async () => {},
-    updateUser: () => {},
-});
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState<PlatformUser | null>(null);
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+    const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
+    const router = useRouter();
 
     useEffect(() => {
-        try {
-            const savedUser = localStorage.getItem('user');
-            if (savedUser) {
-                setUser(JSON.parse(savedUser));
-            }
-        } catch {
-            // ignore
-        }
-    }, []);
-
-    useEffect(() => {
-        fetch('/api/auth/me')
-            .then(res => res.ok ? res.json() : null)
+        const token = localStorage.getItem('platform_token');
+        if (token) {
+            fetch('/api/auth/me', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            .then(res => res.json())
             .then(data => {
-                if (data?.success && data.user) {
+                if (data.success && data.user) {
                     setUser(data.user);
-                    localStorage.setItem('user', JSON.stringify(data.user));
                 } else {
-                    localStorage.removeItem('user');
+                    localStorage.removeItem('platform_token');
                 }
-                setLoading(false);
             })
             .catch(() => {
-                setLoading(false);
-            });
+                localStorage.removeItem('platform_token');
+            })
+            .finally(() => setLoading(false));
+        } else {
+            setLoading(false);
+        }
     }, []);
 
-    const signIn = async (email: string, password: string) => {
-        try {
-            const res = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password }),
-            });
-            const data = await res.json();
-            if (data.success) {
-                setUser(data.user);
-                localStorage.setItem('user', JSON.stringify(data.user));
-                return { error: null };
-            }
-            return { error: data.error || 'Login failed' };
-        } catch (error) {
-            return { error: 'Network error' };
+    const login = async (email: string, password: string) => {
+        const response = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            localStorage.setItem('platform_token', data.data.token);
+            setUser(data.data.user);
+            router.push('/dashboard');
+        } else {
+            throw new Error(data.error || 'فشل تسجيل الدخول');
         }
     };
 
-    const signOut = async () => {
-        try {
-            await fetch('/api/auth/logout', { method: 'POST' });
-        } catch {
-            // ignore
-        }
+    const logout = async () => {
+        localStorage.removeItem('platform_token');
         setUser(null);
-        localStorage.removeItem('user');
+        router.push('/login');
     };
 
-    const updateUser = (updatedUser: PlatformUser) => {
-        setUser(updatedUser);
-        localStorage.setItem('user', JSON.stringify(updatedUser));
+    const refreshUser = async () => {
+        const token = localStorage.getItem('platform_token');
+        if (!token) return;
+        
+        const response = await fetch('/api/auth/me', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await response.json();
+        if (data.success && data.user) {
+            setUser(data.user);
+        }
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, signIn, signOut, updateUser }}>
+        <AuthContext.Provider value={{ user, loading, login, logout, refreshUser }}>
             {children}
         </AuthContext.Provider>
     );
 }
 
 export function useAuth() {
-    return useContext(AuthContext);
+    const context = useContext(AuthContext);
+    if (!context) throw new Error('useAuth must be used within AuthProvider');
+    return context;
 }
