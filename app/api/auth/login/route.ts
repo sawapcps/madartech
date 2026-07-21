@@ -1,11 +1,5 @@
-/*
- * Auth API - Login
- * POST /api/auth/login - authenticate with email/password, returns JWT
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateUser } from '@/lib/auth/jwt';
-import { logLogin } from '@/lib/logger';
 
 const CORS = {
     'Access-Control-Allow-Origin': '*',
@@ -23,19 +17,20 @@ export async function POST(req: NextRequest) {
         
         const { email, password } = await req.json();
         if (!email || !password) {
-            return NextResponse.json({ error: 'Email and password are required' }, { status: 400, headers: CORS });
+            return NextResponse.json(
+                { error: 'Email and password are required' },
+                { status: 400, headers: CORS }
+            );
         }
 
         const result = await authenticateUser(email, password, env);
         if (!result) {
-            return NextResponse.json({ error: 'Invalid credentials' }, { status: 401, headers: CORS });
+            return NextResponse.json(
+                { error: 'Invalid credentials' },
+                { status: 401, headers: CORS }
+            );
         }
 
-        // ✅ تسجيل حدث تسجيل الدخول في السجلات
-        const ip = req.headers.get('x-forwarded-for') || '127.0.0.1';
-        await logLogin(result.user.id, '1', ip);
-
-        // ✅ تعديل هيكل الرد ليكون متوافقاً مع تطبيق المبيعات
         const response = NextResponse.json({
             success: true,
             data: {
@@ -45,7 +40,6 @@ export async function POST(req: NextRequest) {
             }
         }, { headers: CORS });
 
-        // ✅ تعيين الكوكي (اختياري)
         response.cookies.set('platform_token', result.token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
@@ -57,6 +51,9 @@ export async function POST(req: NextRequest) {
         return response;
     } catch (err) {
         console.error('Login error:', err);
-        return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500, headers: CORS });
+        return NextResponse.json(
+            { error: err instanceof Error ? err.message : 'Unknown error' },
+            { status: 500, headers: CORS }
+        );
     }
 }

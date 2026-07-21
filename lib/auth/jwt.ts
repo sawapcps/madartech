@@ -123,3 +123,7 @@ export async function authenticateUser(email: string, password: string, env?: an
         return null;
     }
 }
+
+// ✅ Aliases للتوافق مع الكود الموجود
+export const verifyToken = verifyJWT;
+export const createToken = createJWT;

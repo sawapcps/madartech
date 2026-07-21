@@ -1,13 +1,13 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 
 interface User {
     id: string;
     email: string;
     name: string;
     role: string;
-    company_id: string;
+    company_id?: string;
 }
 
 interface AuthContextType {
@@ -24,68 +24,82 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // ✅ التحقق من التوكن عند تحميل الصفحة
-    useEffect(() => {
-        const token = localStorage.getItem('platform_token');
-        if (token) {
-            fetch('/api/auth/me', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success && data.user) {
-                    setUser(data.user);
+    // ✅ جلب المستخدم من API (يعتمد على cookies تلقائياً)
+    const fetchUser = useCallback(async () => {
+        try {
+            const response = await fetch('/api/auth/me', {
+                credentials: 'include', // ✅ يرسل cookies مع الطلب
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.data?.user) {
+                    setUser(data.data.user);
                 } else {
-                    localStorage.removeItem('platform_token');
+                    setUser(null);
                 }
-            })
-            .catch(() => {
-                localStorage.removeItem('platform_token');
-            })
-            .finally(() => setLoading(false));
-        } else {
+            } else {
+                setUser(null);
+            }
+        } catch (error) {
+            console.error('Error fetching user:', error);
+            setUser(null);
+        } finally {
             setLoading(false);
         }
     }, []);
 
-    // ✅ تسجيل الدخول (بدون useRouter)
+    // ✅ التحقق من المستخدم عند تحميل الصفحة
+    useEffect(() => {
+        fetchUser();
+    }, [fetchUser]);
+
+    // ✅ تسجيل الدخول
     const login = async (email: string, password: string) => {
-        const response = await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
-        });
-        const data = await response.json();
-        
-        if (data.success) {
-            localStorage.setItem('platform_token', data.data.token);
-            setUser(data.data.user);
-            // ✅ استخدام window.location بدلاً من useRouter
-            window.location.href = '/dashboard';
-        } else {
-            throw new Error(data.error || 'فشل تسجيل الدخول');
+        setLoading(true);
+        try {
+            const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password }),
+                credentials: 'include', // ✅ يسمح بتعيين cookies
+            });
+
+            const data = await response.json();
+
+            if (data.success && data.data?.user) {
+                setUser(data.data.user);
+                // ✅ التوجيه إلى لوحة التحكم
+                window.location.href = '/dashboard';
+            } else {
+                throw new Error(data.error || 'فشل تسجيل الدخول');
+            }
+        } catch (error) {
+            console.error('Login error:', error);
+            throw error;
+        } finally {
+            setLoading(false);
         }
     };
 
     // ✅ تسجيل الخروج
     const logout = async () => {
-        localStorage.removeItem('platform_token');
-        setUser(null);
-        window.location.href = '/login';
+        try {
+            await fetch('/api/auth/logout', {
+                method: 'POST',
+                credentials: 'include',
+            });
+        } catch (error) {
+            console.error('Logout error:', error);
+        } finally {
+            setUser(null);
+            window.location.href = '/';
+        }
     };
 
     // ✅ تحديث بيانات المستخدم
     const refreshUser = async () => {
-        const token = localStorage.getItem('platform_token');
-        if (!token) return;
-        
-        const response = await fetch('/api/auth/me', {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const data = await response.json();
-        if (data.success && data.user) {
-            setUser(data.user);
-        }
+        await fetchUser();
     };
 
     return (
@@ -97,6 +111,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
     const context = useContext(AuthContext);
-    if (!context) throw new Error('useAuth must be used within AuthProvider');
+    if (!context) {
+        throw new Error('useAuth must be used within AuthProvider');
+    }
     return context;
 }
