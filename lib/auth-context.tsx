@@ -22,90 +22,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // ✅ التحقق من المستخدم عند التحميل
+    // ✅ استخدام localStorage (كان يعمل)
     useEffect(() => {
-        const checkAuth = async () => {
-            try {
-                console.log('🔍 التحقق من المصادقة...');
-                
-                // ✅ محاولة قراءة التوكن من cookies مباشرة
-                const response = await fetch('/api/auth/me', {
-                    credentials: 'include',
-                    headers: {
-                        'Cache-Control': 'no-cache',
-                        'Pragma': 'no-cache'
-                    }
-                });
-                
-                console.log('📝 رد /api/auth/me:', response.status);
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success && data.data?.user) {
-                        setUser(data.data.user);
-                        console.log('✅ تم تسجيل الدخول:', data.data.user.email);
-                    }
+        const token = localStorage.getItem('platform_token');
+        if (token) {
+            fetch('/api/auth/me', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.user) {
+                    setUser(data.user);
                 } else {
-                    console.log('❌ لم يتم العثور على جلسة (401)');
-                    setUser(null);
+                    localStorage.removeItem('platform_token');
                 }
-            } catch (error) {
-                console.error('❌ خطأ في التحقق:', error);
-                setUser(null);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        checkAuth();
+            })
+            .catch(() => localStorage.removeItem('platform_token'))
+            .finally(() => setLoading(false));
+        } else {
+            setLoading(false);
+        }
     }, []);
 
     const login = async (email: string, password: string) => {
         try {
-            console.log('🔍 محاولة تسجيل الدخول:', email);
-            
             const response = await fetch('/api/auth/login', {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
-                },
-                body: JSON.stringify({ email, password }),
-                credentials: 'include'
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
             });
 
             const data = await response.json();
-            console.log('📝 رد تسجيل الدخول:', data);
-
+            
             if (data.success) {
+                localStorage.setItem('platform_token', data.data.token);
                 setUser(data.data.user);
-                console.log('✅ تم تسجيل الدخول بنجاح');
-                // ✅ استخدام window.location.assign
-                window.location.assign('/dashboard');
+                window.location.href = '/dashboard';
             } else {
                 alert(data.error || 'فشل تسجيل الدخول');
             }
         } catch (error) {
-            console.error('❌ Login error:', error);
+            console.error('Login error:', error);
             alert('حدث خطأ في تسجيل الدخول');
         }
     };
 
     const logout = async () => {
-        try {
-            console.log('🔍 محاولة تسجيل الخروج...');
-            await fetch('/api/auth/logout', {
-                method: 'POST',
-                credentials: 'include'
-            });
-            console.log('✅ تم تسجيل الخروج');
-        } catch (error) {
-            console.error('❌ Logout error:', error);
-        } finally {
-            setUser(null);
-            window.location.assign('/');
-        }
+        localStorage.removeItem('platform_token');
+        setUser(null);
+        window.location.href = '/';
     };
 
     return (
