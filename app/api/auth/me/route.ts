@@ -1,15 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(req: NextRequest) {
     try {
-        // ✅ محاولة قراءة التوكن من Authorization header
-        const authHeader = req.headers.get('authorization');
-        let token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-
-        // ✅ إذا لم يكن في الـ Header، جرب من الكوكيز
-        if (!token) {
-            token = req.cookies.get('platform_token')?.value || null;
-        }
+        // ✅ قراءة التوكن من cookies فقط
+        const token = req.cookies.get('platform_token')?.value;
 
         console.log('🔍 /api/auth/me - التوكن:', token ? 'موجود' : 'غير موجود');
 
