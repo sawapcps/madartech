@@ -8,7 +8,6 @@ const CORS = {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
 };
 
-// ✅ دالة OPTIONS (مهمة لـ CORS - يتم استدعاؤها قبل POST)
 export async function OPTIONS() {
     return new NextResponse(null, { 
         status: 204, 
@@ -41,13 +40,19 @@ export async function POST(req: NextRequest) {
         const result = await db.prepare(sql).bind(...(params || [])).all();
         const executionTime = Date.now() - startTime;
 
-        // ✅ التحقق من النتيجة
         const data = result.results || [];
-        
-        // ✅ إرجاع النتيجة مع CORS
+
+        // ✅ استخراج أسماء الأعمدة
+        let columns: string[] = [];
+        if (data.length > 0) {
+            columns = Object.keys(data[0]);
+        }
+
+        // ✅ إرجاع النتيجة مع الأعمدة
         return NextResponse.json({ 
             success: true, 
             data: data,
+            columns: columns,  // ✅ أضف أسماء الأعمدة هنا
             rowCount: data.length,
             executionTime: `${executionTime}ms`
         }, { 
