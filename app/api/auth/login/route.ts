@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { dbQuerySingle } from '@/lib/db/driver';
-import { verifyPassword } from '@/lib/auth/jwt'; // ✅ استيراد verifyPassword
+import { verifyPassword } from '@/lib/auth/jwt';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -42,7 +42,15 @@ export async function POST(req: NextRequest) {
     }
 
     // ✅ ✅ ✅ استخدام verifyPassword للتحقق من الهاش
-    if (!verifyPassword(password, user.password)) {
+    const isValid = verifyPassword(password, user.password);
+    console.log('🔍 التحقق من كلمة المرور:', { 
+      email, 
+      passwordProvided: password,
+      storedHash: user.password ? user.password.substring(0, 20) + '...' : 'undefined',
+      isValid 
+    });
+
+    if (!isValid) {
       return NextResponse.json(
         { error: 'كلمة المرور غير صحيحة' },
         { status: 401, headers: CORS }
@@ -74,12 +82,13 @@ export async function POST(req: NextRequest) {
       path: '/',
     });
 
+    console.log('✅ تم تسجيل الدخول بنجاح:', user.email);
     return response;
 
   } catch (err) {
     console.error('❌ Login error:', err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
+      { error: err instanceof Error ? err.message : 'حدث خطأ غير معروف' },
       { status: 500, headers: CORS }
     );
   }
