@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { dbQuerySingle } from '@/lib/db/driver';
+import { verifyPassword } from '@/lib/auth/jwt'; // ✅ استيراد verifyPassword
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -40,15 +41,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ✅ التحقق من كلمة المرور (مقارنة نصية)
-    if (user.password !== password) {
+    // ✅ ✅ ✅ استخدام verifyPassword للتحقق من الهاش
+    if (!verifyPassword(password, user.password)) {
       return NextResponse.json(
         { error: 'كلمة المرور غير صحيحة' },
         { status: 401, headers: CORS }
       );
     }
 
-    // ✅ إنشاء توكن بسيط
+    // ✅ إنشاء توكن
     const token = 'test_token_' + Date.now() + '_' + Math.random().toString(36).substring(2, 10);
 
     const response = NextResponse.json({
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60, // 7 أيام
+      maxAge: 7 * 24 * 60 * 60,
       path: '/',
     });
 
