@@ -1,16 +1,16 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: corsHeaders });
+}
+
 export async function POST(request: Request) {
-  const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-  };
-
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
-  }
-
   try {
     console.log("🔍 Login attempt started");
     const body = await request.json();
@@ -26,7 +26,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // ✅ الوصول إلى D1 عبر getCloudflareContext
     const { env } = await getCloudflareContext();
     console.log("🔍 Context received: Yes");
 
@@ -45,11 +44,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // ✅ التحقق من كلمة المرور — يدعم salt:hash ونص عادي
+    // ✅ التحقق من كلمة المرور
     let isValid = false;
     try {
       if (user.password.includes(":")) {
-        // صيغة salt:hash (SHA-256)
         const [salt, storedHash] = user.password.split(":");
         const encoder = new TextEncoder();
         const data = encoder.encode(salt + password);
@@ -81,12 +79,16 @@ export async function POST(request: Request) {
       JSON.stringify({
         uid: user.id,
         email: user.email,
+        name: user.name,
         role: user.role,
         exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
       })
     );
 
     console.log("✅ Login successful for:", email);
+
+    // ✅ إعداد الـ cookie
+    const cookieValue = `platform_token=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800`;
 
     return new Response(
       JSON.stringify({
@@ -101,7 +103,14 @@ export async function POST(request: Request) {
           token: token,
         },
       }),
-      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Set-Cookie": cookieValue,
+          ...corsHeaders,
+        },
+      }
     );
   } catch (err) {
     console.error("❌ Login error:", err.message, err.stack);
@@ -110,16 +119,4 @@ export async function POST(request: Request) {
       { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   }
-}
-
-// ✅ معالجة CORS preflight
-export async function OPTIONS() {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    },
-  });
 }
