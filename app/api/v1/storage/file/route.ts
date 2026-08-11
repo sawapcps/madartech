@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbQuery } from '@/lib/db/driver';
-import path from 'path';
-import fs from 'fs/promises';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -16,7 +14,35 @@ export async function OPTIONS() {
 
 const SCHEMA = 'tenant_a0000000_0000_0000_0000_000000000001';
 const COMPANY_ID = 'b15d3621-2b47-42c8-af9d-d109b900829e';
-const STORAGE_DIR = path.join(process.cwd(), 'storage', 'uploads');
+
+// ✅ الوصول إلى R2 عبر binding
+function getBucket(request: NextRequest): R2Bucket {
+  // @ts-ignore — env يُحقن عبر Cloudflare Workers runtime
+  const env = (request as any).env ?? process.env;
+  const bucket = env.STORAGE;
+  if (!bucket) {
+    throw new Error('R2 STORAGE binding is not configured');
+  }
+  return bucket;
+}
+
+const contentTypes: Record<string, string> = {
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+  '.bmp': 'image/bmp', '.ico': 'image/x-icon', '.tiff': 'image/tiff',
+  '.apk': 'application/vnd.android.package-archive',
+  '.aab': 'application/octet-stream', '.ipa': 'application/octet-stream',
+  '.exe': 'application/x-msdownload', '.msi': 'application/x-msi',
+  '.dmg': 'application/x-apple-diskimage', '.pkg': 'application/x-newton-compatible-pkg',
+  '.pdf': 'application/pdf', '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.txt': 'text/plain', '.csv': 'text/csv',
+  '.mp4': 'video/mp4', '.avi': 'video/x-msvideo', '.mov': 'video/quicktime',
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
+  '.zip': 'application/zip', '.rar': 'application/vnd.rar',
+  '.7z': 'application/x-7z-compressed',
+  '.json': 'application/json', '.xml': 'application/xml',
+};
 
 export async function GET(request: NextRequest) {
   try {
@@ -35,46 +61,22 @@ export async function GET(request: NextRequest) {
       }
 
       const fileRecord = records[0];
-      const filePath = path.join(STORAGE_DIR, fileRecord.file_name);
+      const bucket = getBucket(request);
 
-      try {
-        await fs.access(filePath);
-      } catch {
-        return NextResponse.json({ error: 'File not found on disk' }, { status: 404, headers: CORS_HEADERS });
+      // ✅ جلب الملف من R2 بدلاً من القرص
+      const object = await bucket.get(fileRecord.file_path);
+
+      if (!object) {
+        return NextResponse.json({ error: 'File not found in R2' }, { status: 404, headers: CORS_HEADERS });
       }
 
-      const fileBuffer = await fs.readFile(filePath);
+      const headers = new Headers();
+      object.writeHttpMetadata(headers);
+      headers.set('Content-Disposition', `attachment; filename="${fileRecord.file_name}"`);
+      headers.set('Cache-Control', 'public, max-age=31536000');
+      Object.entries(CORS_HEADERS).forEach(([k, v]) => headers.set(k, v));
 
-      const contentTypes: Record<string, string> = {
-        '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-        '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
-        '.bmp': 'image/bmp', '.ico': 'image/x-icon', '.tiff': 'image/tiff',
-        '.apk': 'application/vnd.android.package-archive',
-        '.aab': 'application/octet-stream', '.ipa': 'application/octet-stream',
-        '.exe': 'application/x-msdownload', '.msi': 'application/x-msi',
-        '.dmg': 'application/x-apple-diskimage', '.pkg': 'application/x-newton-compatible-pkg',
-        '.pdf': 'application/pdf', '.doc': 'application/msword',
-        '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        '.txt': 'text/plain', '.csv': 'text/csv',
-        '.mp4': 'video/mp4', '.avi': 'video/x-msvideo', '.mov': 'video/quicktime',
-        '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
-        '.zip': 'application/zip', '.rar': 'application/vnd.rar',
-        '.7z': 'application/x-7z-compressed',
-        '.json': 'application/json', '.xml': 'application/xml',
-      };
-
-      const ext = path.extname(fileRecord.file_name).toLowerCase();
-      const contentType = contentTypes[ext] || 'application/octet-stream';
-
-      return new NextResponse(fileBuffer, {
-        status: 200,
-        headers: {
-          'Content-Type': contentType,
-          'Content-Disposition': `attachment; filename="${fileRecord.file_name}"`,
-          'Cache-Control': 'public, max-age=31536000',
-          ...CORS_HEADERS,
-        },
-      });
+      return new NextResponse(object.body, { status: 200, headers });
     }
 
     // ✅ قائمة جميع الملفات
@@ -94,21 +96,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400, headers: CORS_HEADERS });
     }
 
-    // ✅ إنشاء مجلد التخزين إذا لم يكن موجوداً
-    try {
-      await fs.mkdir(STORAGE_DIR, { recursive: true });
-    } catch {
-      // المجلد موجود بالفعل
-    }
+    const bucket = getBucket(request);
 
-    // ✅ حفظ الملف فعلياً على القرص
+    // ✅ رفع الملف إلى R2 بدلاً من القرص
     const fileName = `${Date.now()}_${file.name}`;
-    const filePath = path.join(STORAGE_DIR, fileName);
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    await fs.writeFile(filePath, buffer);
+    await bucket.put(fileName, file.stream(), {
+      httpMetadata: {
+        contentType: file.type || 'application/octet-stream',
+      },
+    });
 
-    // ✅ حفظ بيانات الملف في قاعدة البيانات
+    // ✅ حفظ بيانات الملف في قاعدة البيانات (D1)
     const query = `
       INSERT INTO ${SCHEMA}.storage (file_name, file_path, file_size, file_type, folder, company_id)
       VALUES ($1, $2, $3, $4, $5, $6)
@@ -152,13 +150,14 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'File not found' }, { status: 404, headers: CORS_HEADERS });
     }
 
-    // ✅ حذف الملف من القرص
     const fileRecord = records[0];
+    const bucket = getBucket(request);
+
+    // ✅ حذف الملف من R2
     try {
-      const filePath = path.join(STORAGE_DIR, fileRecord.file_path);
-      await fs.unlink(filePath);
+      await bucket.delete(fileRecord.file_path);
     } catch {
-      // الملف قد لا يكون موجوداً على القرص
+      // الملف قد لا يكون موجوداً في R2
     }
 
     // ✅ حذف السجل من قاعدة البيانات
