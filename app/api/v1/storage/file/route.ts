@@ -38,7 +38,6 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'حجم الملف يتجاوز 50 ميغابايت' }, { status: 400, headers: CORS });
         }
 
-        // ✅ رفع الملف إلى R2
         const bucket = await getBucket();
         const timestamp = Date.now();
         const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
@@ -54,7 +53,6 @@ export async function POST(req: NextRequest) {
 
         const filePath = `/storage/${folder}/${fileName}`;
 
-        // ✅ تخزين بيانات الملف فقط في D1 (بدون base64)
         const result = await db
             .prepare(`
                 INSERT INTO storage (
@@ -106,7 +104,6 @@ export async function GET(req: NextRequest) {
         const download = url.searchParams.get('download');
         const tenantId = url.searchParams.get('tenant_id') || '1';
 
-        // ✅ جلب ملف محدد بالمعرف
         if (id) {
             const result = await db
                 .prepare('SELECT * FROM storage WHERE id = ?')
@@ -152,7 +149,6 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: 'الملف غير موجود في التخزين' }, { status: 404, headers: CORS });
         }
 
-        // ✅ جلب قائمة الملفات
         const result = await db
             .prepare('SELECT id, tenant_id, file_name, file_path, file_size, file_type, folder, created_at FROM storage ORDER BY created_at DESC')
             .all();
@@ -180,7 +176,6 @@ export async function DELETE(req: NextRequest) {
             return NextResponse.json({ error: 'معرف الملف مطلوب' }, { status: 400, headers: CORS });
         }
 
-        // ✅ جلب بيانات الملف قبل الحذف
         const result = await db
             .prepare('SELECT * FROM storage WHERE id = ?')
             .bind(id)
@@ -206,4 +201,6 @@ export async function DELETE(req: NextRequest) {
 
     } catch (error: any) {
         console.error('❌ DELETE Error:', error);
-        
+        return NextResponse.json({ error: error.message || 'فشل حذف الملف' }, { status: 500, headers: CORS });
+    }
+}
