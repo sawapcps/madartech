@@ -38,11 +38,13 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'حجم الملف يتجاوز 50 ميغابايت' }, { status: 400, headers: CORS });
         }
 
-        // ✅ رفع الملف إلى R2 بدلاً من base64 في D1
+        // ✅ رفع الملف إلى R2
         const bucket = await getBucket();
         const timestamp = Date.now();
         const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
-        const r2Key = `${folder}/${fileName}`;
+        const r2Key = folder && folder !== '/' 
+            ? `${folder}/${fileName}` 
+            : fileName;
 
         await bucket.put(r2Key, file.stream(), {
             httpMetadata: {
@@ -94,7 +96,7 @@ export async function POST(req: NextRequest) {
     }
 }
 
-// ✅ GET - جلب ملف أو قائمة الملفات
+// ✅ GET - جلب ملف أو قائمة ملفات
 export async function GET(req: NextRequest) {
     try {
         const { env } = await getCloudflareContext();
@@ -117,25 +119,37 @@ export async function GET(req: NextRequest) {
 
             const file = result.results[0] as any;
 
-            // ✅ جلب الملف من R2 بدلاً من base64
+            // ✅ أولاً: حاول R2 (الملفات الجديدة)
             const bucket = await getBucket();
             const object = await bucket.get(file.file_path);
 
-            if (!object) {
-                return NextResponse.json({ error: 'الملف غير موجود في التخزين' }, { status: 404, headers: CORS });
+            if (object) {
+                const headers = new Headers();
+                object.writeHttpMetadata(headers);
+                headers.set('Cache-Control', 'public, max-age=31536000');
+
+                if (download === 'true') {
+                    headers.set('Content-Disposition', `attachment; filename="${file.file_name}"`);
+                } else {
+                    headers.set('Content-Disposition', `inline; filename="${file.file_name}"`);
+                }
+
+                return new Response(object.body, { headers });
             }
 
-            const headers = new Headers();
-            object.writeHttpMetadata(headers);
-            headers.set('Cache-Control', 'public, max-age=31536000');
-
-            if (download === 'true') {
-                headers.set('Content-Disposition', `attachment; filename="${file.file_name}"`);
-            } else {
+            // ✅ ثانياً: إذا لم يوجد في R2، حاول base64 من D1 (الصور القديمة)
+            if (file.file_data) {
+                const base64Data = file.file_data;
+                const buffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+                const headers = new Headers();
+                headers.set('Content-Type', file.file_type || 'image/jpeg');
+                headers.set('Cache-Control', 'public, max-age=31536000');
                 headers.set('Content-Disposition', `inline; filename="${file.file_name}"`);
+
+                return new Response(buffer, { headers });
             }
 
-            return new Response(object.body, { headers });
+            return NextResponse.json({ error: 'الملف غير موجود في التخزين' }, { status: 404, headers: CORS });
         }
 
         // ✅ جلب قائمة الملفات
@@ -192,6 +206,4 @@ export async function DELETE(req: NextRequest) {
 
     } catch (error: any) {
         console.error('❌ DELETE Error:', error);
-        return NextResponse.json({ error: error.message || 'فشل حذف الملف' }, { status: 500, headers: CORS });
-    }
-}
+        
