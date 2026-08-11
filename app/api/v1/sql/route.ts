@@ -80,3 +80,21 @@ export async function POST(req: NextRequest) {
         }
 
         return NextResponse.json({
+            success: true,
+            data: data,
+            columns: columns,
+            count: data.length,
+            executionTime: executionTime
+        }, { headers: CORS });
+
+    } catch (error: any) {
+        console.error('❌ SQL Error:', error);
+        return NextResponse.json({
+            success: false,
+            error: error.message || 'فشل تنفيذ الاستعلام'
+        }, { 
+            status: 500, 
+            headers: CORS 
+        });
+    }
+}
