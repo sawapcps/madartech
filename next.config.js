@@ -16,6 +16,16 @@ const nextConfig = {
       },
     ];
   },
-}
+  // ✅ أضف هذا القسم الجديد
+  async redirects() {
+    return [
+      {
+        source: '/api/v1/storage',
+        destination: 'https://cloud.madartech.uk/api/v1/storage',
+        permanent: false,
+      },
+    ];
+  },
+};
 
-module.exports = nextConfig
+module.exports = nextConfig;
