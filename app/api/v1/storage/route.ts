@@ -38,20 +38,35 @@ export async function GET(request: NextRequest) {
       }
 
       const fileRecord = records[0] as any;
+
+      // ✅ أولاً: حاول R2
       const bucket = await getBucket();
       const object = await bucket.get(fileRecord.file_path);
 
-      if (!object) {
-        return NextResponse.json({ error: 'File not found in R2' }, { status: 404, headers: CORS_HEADERS });
+      if (object) {
+        const headers = new Headers();
+        object.writeHttpMetadata(headers);
+        headers.set('Content-Disposition', `attachment; filename="${fileRecord.file_name}"`);
+        headers.set('Cache-Control', 'public, max-age=31536000');
+        Object.entries(CORS_HEADERS).forEach(([k, v]) => headers.set(k, v));
+
+        return new NextResponse(object.body, { status: 200, headers });
       }
 
-      const headers = new Headers();
-      object.writeHttpMetadata(headers);
-      headers.set('Content-Disposition', `attachment; filename="${fileRecord.file_name}"`);
-      headers.set('Cache-Control', 'public, max-age=31536000');
-      Object.entries(CORS_HEADERS).forEach(([k, v]) => headers.set(k, v));
+      // ✅ ثانياً: إذا لم يوجد في R2، حاول base64 من D1 (الصور القديمة)
+      if (fileRecord.file_data) {
+        const base64Data = fileRecord.file_data;
+        const buffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+        const headers = new Headers();
+        headers.set('Content-Type', fileRecord.file_type || 'image/jpeg');
+        headers.set('Cache-Control', 'public, max-age=31536000');
+        headers.set('Content-Disposition', `inline; filename="${fileRecord.file_name}"`);
+        Object.entries(CORS_HEADERS).forEach(([k, v]) => headers.set(k, v));
 
-      return new NextResponse(object.body, { status: 200, headers });
+        return new NextResponse(buffer, { status: 200, headers });
+      }
+
+      return NextResponse.json({ error: 'File not found in R2' }, { status: 404, headers: CORS_HEADERS });
     }
 
     const files = await dbQuery(`SELECT * FROM storage ORDER BY created_at DESC`);
@@ -78,9 +93,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // ✅ أضف tenant_id
     const query = `
-      INSERT INTO storage (file_name, file_path, file_size, file_type, folder, company_id)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO storage (file_name, file_path, file_size, file_type, folder, company_id, tenant_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       RETURNING *
     `;
 
@@ -91,6 +107,7 @@ export async function POST(request: NextRequest) {
       file.type || 'application/octet-stream',
       'uploads',
       COMPANY_ID,
+      1,
     ]);
 
     const downloadUrl = `/api/v1/storage?id=${(result[0] as any).id}`;
