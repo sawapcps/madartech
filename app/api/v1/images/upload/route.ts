@@ -1,86 +1,96 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
-import { resolveApiKey } from '@/lib/auth/api-key';
+import { NextRequest, NextResponse } from 'next/server';
 import { dbQuery } from '@/lib/db/driver';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
-const IMAGE_ROOT = path.join(process.cwd(), 'storage', 'images');
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 200, headers: CORS });
+}
+
+async function getBucket() {
+  const { env } = await getCloudflareContext();
+  const bucket = (env as any).STORAGE;
+  if (!bucket) throw new Error('R2 STORAGE binding is not configured');
+  return bucket as R2Bucket;
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const apiKey = request.headers.get('x-api-key');
-    if (!apiKey) {
-      return NextResponse.json({ error: 'Missing API key' }, { status: 401 });
-    }
-
-    const ctx = await resolveApiKey(apiKey);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Invalid API key' }, { status: 403 });
-    }
-
     const formData = await request.formData();
     const file = formData.get('image') as File;
     const category = (formData.get('category') as string) || 'general';
     const tableName = (formData.get('table_name') as string) || null;
     const recordId = (formData.get('record_id') as string) || null;
+    const tenantId = (formData.get('tenant_id') as string) || '1';
 
     if (!file) {
-      return NextResponse.json({ error: 'No image provided' }, { status: 400 });
+      return NextResponse.json({ error: 'No image provided' }, { status: 400, headers: CORS });
     }
 
     const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
     if (!allowedTypes.includes(file.type)) {
-      return NextResponse.json({ 
-        error: 'Only images are allowed (JPEG, PNG, GIF, WEBP, SVG)' 
-      }, { status: 400 });
+      return NextResponse.json({
+        error: 'Only images are allowed (JPEG, PNG, GIF, WEBP, SVG)'
+      }, { status: 400, headers: CORS });
     }
 
+    // ✅ رفع إلى R2
+    const bucket = await getBucket();
     const timestamp = Date.now();
     const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
     const fileName = `${timestamp}_${safeName}`;
+    const r2Key = category && category !== 'general'
+      ? `${category}/${fileName}`
+      : fileName;
 
-    const schema = ctx.schemaName;
-    const folderPath = path.join(IMAGE_ROOT, schema, category);
-    await mkdir(folderPath, { recursive: true });
+    await bucket.put(r2Key, file.stream(), {
+      httpMetadata: {
+        contentType: file.type,
+      },
+    });
 
-    const filePath = path.join(folderPath, fileName);
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(filePath, buffer);
-
-    const imageUrl = `/api/v1/images/${schema}/${category}/${fileName}`;
-    const fullUrl = `${process.env.PLATFORM_URL || 'http://localhost:3000'}${imageUrl}`;
-
+    // ✅ إدراج في D1 مع tenant_id
     const query = `
-      INSERT INTO ${schema}.storage (file_name, file_path, file_size, file_type, folder, table_name, record_id, company_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO storage (tenant_id, file_name, file_path, file_size, file_type, folder, table_name, record_id, company_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       RETURNING *
     `;
-    
+
     const result = await dbQuery(query, [
+      tenantId,
       file.name,
-      imageUrl,
+      r2Key,
       file.size,
       file.type,
       category,
       tableName,
       recordId,
-      ctx.tenantId
+      tenantId,
     ]);
+
+    const fileId = (result[0] as any).id;
+    const imageUrl = `https://cloud.madartech.uk/api/v1/storage?id=${fileId}`;
 
     return NextResponse.json({
       success: true,
       data: {
-        id: result[0].id,
-        url: fullUrl,
+        id: fileId,
+        url: imageUrl,
         path: imageUrl,
         fileName: file.name,
         size: file.size,
         category: category,
-        createdAt: result[0].created_at
+        createdAt: (result[0] as any).created_at
       }
-    }, { status: 201 });
+    }, { status: 201, headers: CORS });
 
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('❌ Image Upload Error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500, headers: CORS });
   }
 }
