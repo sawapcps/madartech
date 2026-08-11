@@ -1,186 +1,137 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db/driver';
+import { NextRequest, NextResponse } from 'next/server';
+import { dbQuery } from '@/lib/db/driver';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
-const CORS = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
+  'Access-Control-Max-Age': '86400',
 };
 
 export async function OPTIONS() {
-    return new NextResponse(null, { status: 200, headers: CORS });
+  return new NextResponse(null, { status: 200, headers: CORS_HEADERS });
 }
 
-// ✅ POST - رفع ملف
-export async function POST(req: NextRequest) {
-    try {
-        const env = (req as any).env || process.env;
-        const db = await getDb(env);
+const SCHEMA = 'tenant_a0000000_0000_0000_0000_000000000001';
+const COMPANY_ID = 'b15d3621-2b47-42c8-af9d-d109b900829e';
 
-        const formData = await req.formData();
-        const file = formData.get('file') as File;
-        const tenantId = formData.get('tenant_id') as string || '1';
-        const folder = formData.get('folder') as string || '/';
-
-        if (!file) {
-            return NextResponse.json({ error: 'الملف مطلوب' }, { status: 400, headers: CORS });
-        }
-
-        // ✅ السماح بجميع أنواع الملفات (تم إزالة الفلتر)
-        // ✅ التحقق من الحجم (max 50MB)
-        if (file.size > 50 * 1024 * 1024) {
-            return NextResponse.json({ error: 'حجم الملف يتجاوز 50 ميغابايت' }, { status: 400, headers: CORS });
-        }
-
-        const buffer = Buffer.from(await file.arrayBuffer());
-        const base64Data = buffer.toString('base64');
-
-        // ✅ إنشاء اسم فريد للملف
-        const timestamp = Date.now();
-        const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
-        const filePath = `/storage/${folder}/${fileName}`;
-
-        // ✅ تخزين الملف في قاعدة البيانات
-        const result = await db
-            .prepare(`
-                INSERT INTO storage (
-                    tenant_id, file_name, file_path, file_size,
-                    file_type, folder, file_data, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-            `)
-            .bind(
-                tenantId,
-                fileName,
-                filePath,
-                file.size,
-                file.type || 'unknown',
-                folder || '/',
-                base64Data
-            )
-            .run();
-
-        const fileId = result.meta?.last_row_id || 0;
-
-        // ✅ رابط الصورة
-        const imageUrl = `https://cloud.madartech.uk/api/v1/storage?id=${fileId}`;
-
-        return NextResponse.json({
-            success: true,
-            data: {
-                id: fileId,
-                url: imageUrl,
-                path: filePath,
-                fileName: fileName,
-                size: file.size,
-                type: file.type,
-                folder: folder
-            },
-            message: 'تم رفع الملف بنجاح'
-        }, { status: 201, headers: CORS });
-
-    } catch (error: any) {
-        console.error('❌ Upload Error:', error);
-        return NextResponse.json({ error: error.message || 'فشل رفع الملف' }, { status: 500, headers: CORS });
-    }
+async function getBucket() {
+  const { env } = await getCloudflareContext();
+  const bucket = (env as any).STORAGE;
+  if (!bucket) throw new Error('R2 STORAGE binding is not configured');
+  return bucket as R2Bucket;
 }
 
-// ✅ GET - جلب ملف أو قائمة الملفات
-export async function GET(req: NextRequest) {
-    try {
-        const env = (req as any).env || process.env;
-        const db = await getDb(env);
-        const url = new URL(req.url);
-        const id = url.searchParams.get('id');
-        const download = url.searchParams.get('download');
-        const tenantId = url.searchParams.get('tenant_id') || '1';
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const fileId = searchParams.get('id');
 
-        // ✅ جلب ملف محدد بالمعرف
-        if (id) {
-            const result = await db
-                .prepare('SELECT * FROM storage WHERE id = ?')
-                .bind(id)
-                .all();
+    if (fileId) {
+      const records = await dbQuery(
+        `SELECT * FROM ${SCHEMA}.storage WHERE id = $1`,
+        [fileId]
+      );
 
-            if (!result.results || result.results.length === 0) {
-                return NextResponse.json({ error: 'الملف غير موجود' }, { status: 404, headers: CORS });
-            }
+      if (!records || records.length === 0) {
+        return NextResponse.json({ error: 'File not found' }, { status: 404, headers: CORS_HEADERS });
+      }
 
-            const file = result.results[0] as any;
-            const fileData = Buffer.from(file.file_data || '', 'base64');
+      const fileRecord = records[0];
+      const bucket = await getBucket();
+      const object = await bucket.get(fileRecord.file_path);
 
-            // ✅ تحميل الملف (download=true)
-            if (download === 'true') {
-                return new Response(fileData, {
-                    headers: {
-                        'Content-Type': file.file_type || 'application/octet-stream',
-                        'Content-Disposition': `attachment; filename="${file.file_name}"`,
-                        'Cache-Control': 'public, max-age=31536000',
-                    },
-                });
-            }
+      if (!object) {
+        return NextResponse.json({ error: 'File not found in R2' }, { status: 404, headers: CORS_HEADERS });
+      }
 
-            // ✅ عرض الصورة مباشرة
-            const isImage = file.file_type?.startsWith('image/');
-            
-            if (isImage) {
-                return new Response(fileData, {
-                    headers: {
-                        'Content-Type': file.file_type || 'image/png',
-                        'Cache-Control': 'public, max-age=31536000',
-                    },
-                });
-            }
+      const headers = new Headers();
+      object.writeHttpMetadata(headers);
+      headers.set('Content-Disposition', `attachment; filename="${fileRecord.file_name}"`);
+      headers.set('Cache-Control', 'public, max-age=31536000');
+      Object.entries(CORS_HEADERS).forEach(([k, v]) => headers.set(k, v));
 
-            // ✅ عرض الملفات الأخرى (PDF, ZIP, إلخ)
-            return new Response(fileData, {
-                headers: {
-                    'Content-Type': file.file_type || 'application/octet-stream',
-                    'Content-Disposition': `inline; filename="${file.file_name}"`,
-                    'Cache-Control': 'public, max-age=31536000',
-                },
-            });
-        }
-
-        // ✅ جلب قائمة الملفات
-        const result = await db
-            .prepare('SELECT id, tenant_id, file_name, file_path, file_size, file_type, folder, created_at FROM storage ORDER BY created_at DESC')
-            .all();
-
-        return NextResponse.json({
-            success: true,
-            data: result.results || []
-        }, { headers: CORS });
-
-    } catch (error: any) {
-        console.error('❌ GET Error:', error);
-        return NextResponse.json({ error: error.message || 'فشل جلب الملفات' }, { status: 500, headers: CORS });
+      return new NextResponse(object.body, { status: 200, headers });
     }
+
+    const files = await dbQuery(`SELECT * FROM ${SCHEMA}.storage ORDER BY created_at DESC`);
+    return NextResponse.json({ success: true, data: files }, { headers: CORS_HEADERS });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500, headers: CORS_HEADERS });
+  }
 }
 
-// ✅ DELETE - حذف ملف
-export async function DELETE(req: NextRequest) {
-    try {
-        const env = (req as any).env || process.env;
-        const db = await getDb(env);
-        const url = new URL(req.url);
-        const id = url.searchParams.get('id');
+export async function POST(request: NextRequest) {
+  try {
+    const formData = await request.formData();
+    const file = formData.get('file') as File;
 
-        if (!id) {
-            return NextResponse.json({ error: 'معرف الملف مطلوب' }, { status: 400, headers: CORS });
-        }
-
-        await db
-            .prepare('DELETE FROM storage WHERE id = ?')
-            .bind(id)
-            .run();
-
-        return NextResponse.json({
-            success: true,
-            message: 'تم حذف الملف بنجاح'
-        }, { headers: CORS });
-
-    } catch (error: any) {
-        console.error('❌ DELETE Error:', error);
-        return NextResponse.json({ error: error.message || 'فشل حذف الملف' }, { status: 500, headers: CORS });
+    if (!file) {
+      return NextResponse.json({ error: 'No file provided' }, { status: 400, headers: CORS_HEADERS });
     }
+
+    const bucket = await getBucket();
+    const fileName = `${Date.now()}_${file.name}`;
+    await bucket.put(fileName, file.stream(), {
+      httpMetadata: {
+        contentType: file.type || 'application/octet-stream',
+      },
+    });
+
+    const query = `
+      INSERT INTO ${SCHEMA}.storage (file_name, file_path, file_size, file_type, folder, company_id)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *
+    `;
+
+    const result = await dbQuery(query, [
+      file.name,
+      fileName,
+      file.size,
+      file.type || 'application/octet-stream',
+      'uploads',
+      COMPANY_ID,
+    ]);
+
+    const downloadUrl = `/api/v1/storage?id=${result[0].id}`;
+
+    return NextResponse.json(
+      { success: true, data: result[0], url: downloadUrl },
+      { status: 201, headers: CORS_HEADERS }
+    );
+  } catch (error: any) {
+    console.error('POST Error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500, headers: CORS_HEADERS });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400, headers: CORS_HEADERS });
+    }
+
+    const records = await dbQuery(`SELECT * FROM ${SCHEMA}.storage WHERE id = $1`, [id]);
+
+    if (!records || records.length === 0) {
+      return NextResponse.json({ error: 'File not found' }, { status: 404, headers: CORS_HEADERS });
+    }
+
+    const fileRecord = records[0];
+    const bucket = await getBucket();
+
+    try {
+      await bucket.delete(fileRecord.file_path);
+    } catch {}
+
+    await dbQuery(`DELETE FROM ${SCHEMA}.storage WHERE id = $1`, [id]);
+
+    return NextResponse.json({ success: true }, { headers: CORS_HEADERS });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500, headers: CORS_HEADERS });
+  }
 }
