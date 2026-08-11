@@ -22,7 +22,6 @@ async function getBucket() {
   return bucket as R2Bucket;
 }
 
-// ✅ GET - جلب ملف أو قائمة الملفات
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -77,93 +76,58 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ✅ POST - رفع ملف (معدل)
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
     if (!file) {
-      return NextResponse.json({ error: 'الملف مطلوب' }, { status: 400, headers: CORS_HEADERS });
+      return NextResponse.json({ error: 'No file provided' }, { status: 400, headers: CORS_HEADERS });
     }
 
-    // ✅ الحصول على tenant_id من المستخدم الحالي (من التوكن أو الجلسة)
-    // يمكنك استخراجها من رأس الطلب (Authorization) أو من formData
-    const tenantId = formData.get('tenant_id') as string || '1';
-    const folder = formData.get('folder') as string || '/';
-
-    // ✅ تحقق من حجم الملف
-    if (file.size > 50 * 1024 * 1024) {
-      return NextResponse.json({ error: 'حجم الملف يتجاوز 50 ميغابايت' }, { status: 400, headers: CORS_HEADERS });
-    }
-
-    // ✅ رفع الملف إلى R2
     const bucket = await getBucket();
-    const timestamp = Date.now();
-    const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
-    const r2Key = folder && folder !== '/' ? `${folder}/${fileName}` : fileName;
-
-    await bucket.put(r2Key, file.stream(), {
+    const fileName = `${Date.now()}_${file.name}`;
+    await bucket.put(fileName, file.stream(), {
       httpMetadata: {
         contentType: file.type || 'application/octet-stream',
       },
     });
 
-    // ✅ إدراج في D1 مع التحقق من النجاح
+    // ✅ أضف tenant_id
     const query = `
       INSERT INTO storage (file_name, file_path, file_size, file_type, folder, company_id, tenant_id)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-      RETURNING id
+      RETURNING *
     `;
 
     const result = await dbQuery(query, [
       file.name,
-      r2Key,
+      fileName,
       file.size,
       file.type || 'application/octet-stream',
-      folder || '/',
+      'uploads',
       COMPANY_ID,
-      parseInt(tenantId, 10), // ✅ تأكد من أن tenant_id رقم صحيح
+      1,
     ]);
 
-    // ✅ تحقق من أن الإدراج نجح
-    if (!result || result.length === 0) {
-      // ❌ إذا فشل الإدراج، احذف الملف من R2 (لتنظيف)
-      await bucket.delete(r2Key).catch(() => {});
-      return NextResponse.json(
-        { error: 'فشل حفظ بيانات الملف في قاعدة البيانات' },
-        { status: 500, headers: CORS_HEADERS }
-      );
-    }
-
-    const fileId = result[0].id;
-    const downloadUrl = `/api/v1/storage?id=${fileId}`;
+    const fileId = (result[0] as any).id;
+    const fullUrl = `https://cloud.madartech.uk/api/v1/storage?id=${fileId}`;
 
     return NextResponse.json(
-      {
-        success: true,
-        data: {
-          id: fileId,
-          url: downloadUrl,
-          fileName: fileName,
-          size: file.size,
-          type: file.type,
-          folder: folder,
-        },
-        message: 'تم رفع الملف بنجاح',
+      { 
+        success: true, 
+        data: { ...result[0], url: fullUrl, image_url: fullUrl },
+        url: fullUrl,
+        image_url: fullUrl,
       },
       { status: 201, headers: CORS_HEADERS }
     );
   } catch (error: any) {
-    console.error('❌ POST Error:', error);
-    return NextResponse.json(
-      { error: error.message || 'فشل رفع الملف' },
-      { status: 500, headers: CORS_HEADERS }
-    );
+    console.error('POST Error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500, headers: CORS_HEADERS });
   }
 }
 
-// ✅ DELETE - حذف ملف
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
