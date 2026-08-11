@@ -76,6 +76,14 @@ export async function POST(request: NextRequest) {
     const fileId = (result[0] as any).id;
     const imageUrl = `https://cloud.madartech.uk/api/v1/storage?id=${fileId}`;
 
+    // ✅ ربط الصورة بالمنتج تلقائياً
+    if (tableName === 'products' && recordId) {
+      await dbQuery(
+        `UPDATE products SET image_url = ?, updated_at = datetime('now') WHERE id = ?`,
+        [imageUrl, recordId]
+      );
+    }
+
     return NextResponse.json({
       success: true,
       data: {
