@@ -13,7 +13,6 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 200, headers: CORS_HEADERS });
 }
 
-const SCHEMA = 'tenant_a0000000_0000_0000_0000_000000000001';
 const COMPANY_ID = 'b15d3621-2b47-42c8-af9d-d109b900829e';
 
 async function getBucket() {
@@ -30,7 +29,7 @@ export async function GET(request: NextRequest) {
 
     if (fileId) {
       const records = await dbQuery(
-        `SELECT * FROM ${SCHEMA}.storage WHERE id = $1`,
+        `SELECT * FROM storage WHERE id = $1`,
         [fileId]
       );
 
@@ -55,7 +54,7 @@ export async function GET(request: NextRequest) {
       return new NextResponse(object.body, { status: 200, headers });
     }
 
-    const files = await dbQuery(`SELECT * FROM ${SCHEMA}.storage ORDER BY created_at DESC`);
+    const files = await dbQuery(`SELECT * FROM storage ORDER BY created_at DESC`);
     return NextResponse.json({ success: true, data: files }, { headers: CORS_HEADERS });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500, headers: CORS_HEADERS });
@@ -80,7 +79,7 @@ export async function POST(request: NextRequest) {
     });
 
     const query = `
-      INSERT INTO ${SCHEMA}.storage (file_name, file_path, file_size, file_type, folder, company_id)
+      INSERT INTO storage (file_name, file_path, file_size, file_type, folder, company_id)
       VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *
     `;
@@ -115,7 +114,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'id is required' }, { status: 400, headers: CORS_HEADERS });
     }
 
-    const records = await dbQuery(`SELECT * FROM ${SCHEMA}.storage WHERE id = $1`, [id]);
+    const records = await dbQuery(`SELECT * FROM storage WHERE id = $1`, [id]);
 
     if (!records || records.length === 0) {
       return NextResponse.json({ error: 'File not found' }, { status: 404, headers: CORS_HEADERS });
@@ -128,7 +127,7 @@ export async function DELETE(request: NextRequest) {
       await bucket.delete(fileRecord.file_path);
     } catch {}
 
-    await dbQuery(`DELETE FROM ${SCHEMA}.storage WHERE id = $1`, [id]);
+    await dbQuery(`DELETE FROM storage WHERE id = $1`, [id]);
 
     return NextResponse.json({ success: true }, { headers: CORS_HEADERS });
   } catch (error: any) {
