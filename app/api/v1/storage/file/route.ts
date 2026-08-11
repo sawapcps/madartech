@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbQuery } from '@/lib/db/driver';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -15,15 +16,14 @@ export async function OPTIONS() {
 const SCHEMA = 'tenant_a0000000_0000_0000_0000_000000000001';
 const COMPANY_ID = 'b15d3621-2b47-42c8-af9d-d109b900829e';
 
-// ✅ الوصول إلى R2 عبر binding
-function getBucket(request: NextRequest): R2Bucket {
-  // @ts-ignore — env يُحقن عبر Cloudflare Workers runtime
-  const env = (request as any).env ?? process.env;
-  const bucket = env.STORAGE;
+// ✅ الوصول إلى R2 عبر getCloudflareContext (الطريقة الصحيحة في OpenNext)
+async function getBucket() {
+  const { env } = await getCloudflareContext();
+  const bucket = (env as any).STORAGE;
   if (!bucket) {
     throw new Error('R2 STORAGE binding is not configured');
   }
-  return bucket;
+  return bucket as R2Bucket;
 }
 
 const contentTypes: Record<string, string> = {
@@ -61,9 +61,9 @@ export async function GET(request: NextRequest) {
       }
 
       const fileRecord = records[0];
-      const bucket = getBucket(request);
+      const bucket = await getBucket();
 
-      // ✅ جلب الملف من R2 بدلاً من القرص
+      // ✅ جلب الملف من R2
       const object = await bucket.get(fileRecord.file_path);
 
       if (!object) {
@@ -96,9 +96,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400, headers: CORS_HEADERS });
     }
 
-    const bucket = getBucket(request);
+    const bucket = await getBucket();
 
-    // ✅ رفع الملف إلى R2 بدلاً من القرص
+    // ✅ رفع الملف إلى R2
     const fileName = `${Date.now()}_${file.name}`;
     await bucket.put(fileName, file.stream(), {
       httpMetadata: {
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // ✅ حفظ بيانات الملف في قاعدة البيانات (D1)
+    // ✅ حفظ بيانات الملف في D1
     const query = `
       INSERT INTO ${SCHEMA}.storage (file_name, file_path, file_size, file_type, folder, company_id)
       VALUES ($1, $2, $3, $4, $5, $6)
@@ -143,7 +143,6 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'id is required' }, { status: 400, headers: CORS_HEADERS });
     }
 
-    // ✅ جلب بيانات الملف قبل الحذف
     const records = await dbQuery(`SELECT * FROM ${SCHEMA}.storage WHERE id = $1`, [id]);
 
     if (!records || records.length === 0) {
@@ -151,7 +150,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const fileRecord = records[0];
-    const bucket = getBucket(request);
+    const bucket = await getBucket();
 
     // ✅ حذف الملف من R2
     try {
@@ -160,7 +159,7 @@ export async function DELETE(request: NextRequest) {
       // الملف قد لا يكون موجوداً في R2
     }
 
-    // ✅ حذف السجل من قاعدة البيانات
+    // ✅ حذف السجل من D1
     await dbQuery(`DELETE FROM ${SCHEMA}.storage WHERE id = $1`, [id]);
 
     return NextResponse.json({ success: true }, { headers: CORS_HEADERS });
