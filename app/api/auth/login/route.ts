@@ -76,13 +76,17 @@ export async function POST(request: Request) {
 
     // ✅ إنشاء توكن
     const token = btoa(
-      JSON.stringify({
-        uid: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
-      })
+      unescape(
+        encodeURIComponent(
+          JSON.stringify({
+            uid: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
+          })
+        )
+      )
     );
 
     console.log("✅ Login successful for:", email);
